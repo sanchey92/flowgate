@@ -22,16 +22,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
 
       - name: Cache lint tools (bin/)
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: bin
           key: ${{ runner.os }}-go-tools-${{ hashFiles('Makefile') }}
@@ -39,7 +39,7 @@ jobs:
             ${{ runner.os }}-go-tools-
 
       - name: Cache golangci-lint analysis
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/golangci-lint
           key: ${{ runner.os }}-golangci-lint-${{ hashFiles('Makefile', '**/*.go', 'go.mod', 'go.sum') }}
@@ -63,10 +63,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -78,7 +78,7 @@ jobs:
         run: go tool cover -func=coverage.out | tee coverage.txt
 
       - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage
           path: |
@@ -92,10 +92,10 @@ jobs:
     timeout-minutes: 10
     needs: [lint, test]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
@@ -109,7 +109,7 @@ jobs:
           file bin/flowgate
 
       - name: Upload binary artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: flowgate-linux-amd64
           path: bin/flowgate
