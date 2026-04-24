@@ -1,14 +1,18 @@
 package main
 
 import (
+	"context"
+
+	"github.com/sanchey92/flowgate/internal/app"
 	"github.com/sanchey92/flowgate/internal/config"
-	"github.com/sanchey92/flowgate/pkg/logger"
 )
 
 func main() {
 	cfg := config.MustLoad(".env")
 
-	log := logger.Setup(cfg.Env, cfg.LogLevel)
+	a := app.New(cfg)
 
-	log.Info("FlowGate starting...", "env", cfg.Env)
+	if err := a.Run(context.Background()); err != nil {
+		panic("failed to run app" + err.Error())
+	}
 }
