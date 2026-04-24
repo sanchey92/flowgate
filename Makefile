@@ -52,15 +52,10 @@ fmt-check: $(GOIMPORTS)
 	 fi
 
 tidy-check:
-	@git rev-parse --is-inside-work-tree >/dev/null 2>&1 || { \
-	   echo "tidy-check: not a git repository, skipping"; exit 0; \
-	 }; \
-	 go mod tidy; \
-	 files="go.mod"; [ -f go.sum ] && files="$$files go.sum"; \
-	 git diff --exit-code -- $$files || { \
+	@if ! go mod tidy -diff; then \
 	   echo "go.mod/go.sum are not tidy. Run 'go mod tidy' and commit the result."; \
 	   exit 1; \
-	 }
+	 fi
 
 ci: tidy-check fmt-check vet lint test-ci build
 

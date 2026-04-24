@@ -1,7 +1,14 @@
 package main
 
-import "log/slog"
+import (
+	"github.com/sanchey92/flowgate/internal/config"
+	"github.com/sanchey92/flowgate/pkg/logger"
+)
 
 func main() {
-	slog.Info("here we go!")
+	cfg := config.MustLoad(".env")
+
+	log := logger.Setup(cfg.Env, cfg.LogLevel)
+
+	log.Info("FlowGate starting...", "env", cfg.Env)
 }

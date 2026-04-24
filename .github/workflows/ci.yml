@@ -13,6 +13,9 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  CONFIG_PATH: ${{ secrets.CONFIG_PATH }}
+
 jobs:
   lint:
     name: Lint
