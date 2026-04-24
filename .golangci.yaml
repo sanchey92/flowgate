@@ -1,0 +1,129 @@
+version: "2"
+
+run:
+  timeout: 5m
+  relative-path-mode: gomod
+  issues-exit-code: 1
+  tests: false
+  modules-download-mode: readonly
+
+output:
+  formats:
+    text:
+      print-linter-name: true
+      print-issued-lines: true
+      colors: true
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  uniq-by-line: true
+
+linters:
+  default: standard
+  enable:
+    - asciicheck
+    - bodyclose
+    - containedctx
+    - contextcheck
+    - cyclop
+    - depguard
+    - dupl
+    - errcheck
+    - errorlint
+    - exhaustive
+    - errname
+    - forbidigo
+    - goconst
+    - gocritic
+    - gosec
+    - govet
+    - ineffassign
+    - mirror
+    - nakedret
+    - nilerr
+    - noctx
+    - nolintlint
+    - prealloc
+    - predeclared
+    - reassign
+    - revive
+    - sqlclosecheck
+    - staticcheck
+    - unparam
+    - unused
+    - wrapcheck
+  disable:
+    - gocyclo
+    - lll
+
+  exclusions:
+    generated: strict
+    rules:
+      - path: _test\.go
+        linters:
+          - cyclop
+          - dupl
+          - gosec
+          - wrapcheck
+          - goconst
+
+  settings:
+    gosec:
+      excludes:
+        - G117
+      config:
+        global:
+          audit: true
+          show-ignored: true
+        severity: "medium"
+        confidence: "medium"
+
+    cyclop:
+      max-complexity: 20
+
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: io/ioutil
+              desc: "io/ioutil is deprecated; use os/io instead"
+
+    revive:
+      severity: warning
+
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+
+    nakedret:
+      max-func-lines: 30
+
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+
+    forbidigo:
+      exclude-godoc-examples: true
+      analyze-types: true
+      forbid:
+        - pattern: '^fmt\.Print.*$'
+          msg: "use a structured logger instead of fmt.Print*"
+        - pattern: '^time\.Sleep$'
+          msg: "use timers or context instead of time.Sleep"
+        - pattern: '^http\.DefaultClient$'
+          msg: "create *http.Client with timeouts instead of http.DefaultClient"
+
+formatters:
+  enable:
+    - gofumpt
+    - gci
+  settings:
+    gofumpt:
+      extra-rules: true
+    gci:
+      sections:
+        - Standard
+        - Default
+        - Prefix(github.com/sanchey92/sso/)
+      no-inline-comments: false
