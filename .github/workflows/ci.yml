@@ -27,6 +27,22 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Cache lint tools (bin/)
+        uses: actions/cache@v4
+        with:
+          path: bin
+          key: ${{ runner.os }}-go-tools-${{ hashFiles('Makefile') }}
+          restore-keys: |
+            ${{ runner.os }}-go-tools-
+
+      - name: Cache golangci-lint analysis
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/golangci-lint
+          key: ${{ runner.os }}-golangci-lint-${{ hashFiles('Makefile', '**/*.go', 'go.mod', 'go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-golangci-lint-
+
       - name: tidy-check
         run: make tidy-check
 
