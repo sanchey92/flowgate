@@ -9,8 +9,14 @@ import (
 )
 
 type Config struct {
-	Env      string `yaml:"env" env:"ENV" env-default:"dev"`
-	LogLevel string `yaml:"log_level" env:"LOG_LEVEL" env-default:"info"`
+	Env      string  `yaml:"env" env:"ENV" env-default:"dev"`
+	LogLevel string  `yaml:"log_level" env:"LOG_LEVEL" env-default:"info"`
+	Backend  Backend `yaml:"backend"`
+}
+
+type Backend struct {
+	Addr   string `yaml:"addr"`
+	Weight int    `yaml:"weight"`
 }
 
 func MustLoad(env string) *Config {
