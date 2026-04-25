@@ -1,2 +1,7 @@
 env: dev
 log_level: debug
+backends:
+  - addr: "10.0.0.1:8080"
+    weight: 5
+  - addr: "10.0.0.2:8080"
+    weight: 3
