@@ -1,4 +1,4 @@
-.PHONY: build run test test-ci test-coverage lint vet fmt fmt-check tidy-check ci clean
+.PHONY: build run test test-ci test-coverage lint vet fmt fmt-check tidy-check ci clean mocks
 
 APP_NAME := flowgate
 BUILD_DIR := bin
@@ -12,11 +12,17 @@ GOLANGCI_LINT := $(BUILD_DIR)/golangci-lint
 GOIMPORTS_VERSION := v0.44.0
 GOIMPORTS := $(BUILD_DIR)/goimports
 
+MOCKERY_VERSION := v2.53.3
+MOCKERY := $(BUILD_DIR)/mockery
+
 $(GOLANGCI_LINT):
 	GOBIN=$(CURDIR)/$(BUILD_DIR) go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
 $(GOIMPORTS):
 	GOBIN=$(CURDIR)/$(BUILD_DIR) go install golang.org/x/tools/cmd/goimports@$(GOIMPORTS_VERSION)
+
+$(MOCKERY):
+	GOBIN=$(CURDIR)/$(BUILD_DIR) go install github.com/vektra/mockery/v2@$(MOCKERY_VERSION)
 
 # --- Commands ---
 
@@ -56,6 +62,9 @@ tidy-check:
 	   echo "go.mod/go.sum are not tidy. Run 'go mod tidy' and commit the result."; \
 	   exit 1; \
 	 fi
+
+mocks: $(MOCKERY)
+	$(MOCKERY)
 
 ci: tidy-check fmt-check vet lint test-ci build
 
