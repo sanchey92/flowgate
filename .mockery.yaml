@@ -10,3 +10,4 @@ packages:
   github.com/sanchey92/flowgate/internal/balancer:
     interfaces:
       Sourcer:
+      Snapshotter:
