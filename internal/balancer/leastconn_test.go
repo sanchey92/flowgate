@@ -176,7 +176,7 @@ func TestLeastConn_Realise_NilBackend(t *testing.T) {
 	lc := balancer.NewLeastConn(snap)
 
 	assert.NotPanics(t, func() {
-		lc.Realise(nil)
+		lc.Release(nil)
 	})
 }
 
@@ -187,11 +187,11 @@ func TestLeastConn_Realise_DecrementsActiveConns(t *testing.T) {
 	b := model.NewBackend("a:1", 1, 0)
 	b.ActiveConns.Store(3)
 
-	lc.Realise(b)
+	lc.Release(b)
 	assert.Equal(t, int64(2), b.ActiveConns.Load())
 
-	lc.Realise(b)
-	lc.Realise(b)
+	lc.Release(b)
+	lc.Release(b)
 	assert.Equal(t, int64(0), b.ActiveConns.Load())
 }
 
@@ -202,7 +202,7 @@ func TestLeastConn_Realise_NeverGoesBelowZero(t *testing.T) {
 	b := model.NewBackend("a:1", 1, 0)
 	// Изначально 0 — Realise не должен сделать значение отрицательным.
 	for i := 0; i < 10; i++ {
-		lc.Realise(b)
+		lc.Release(b)
 	}
 	assert.Equal(t, int64(0), b.ActiveConns.Load())
 }
@@ -224,7 +224,7 @@ func TestLeastConn_PickThenRealise_ReturnsCounterToZero(t *testing.T) {
 	assert.Equal(t, int64(n), a.ActiveConns.Load())
 
 	for _, p := range picked {
-		lc.Realise(p)
+		lc.Release(p)
 	}
 	assert.Equal(t, int64(0), a.ActiveConns.Load())
 }
@@ -253,7 +253,7 @@ func TestLeastConn_Pick_Concurrent(t *testing.T) {
 				got, err := lc.Pick()
 				assert.NoError(t, err)
 				require.NotNil(t, got)
-				lc.Realise(got)
+				lc.Release(got)
 			}
 		}()
 	}
@@ -313,7 +313,7 @@ func TestLeastConn_Realise_Concurrent(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for i := 0; i < perGoro; i++ {
-				lc.Realise(b)
+				lc.Release(b)
 			}
 		}()
 	}
@@ -329,7 +329,7 @@ func TestLeastConn_Realise_Concurrent(t *testing.T) {
 		go func() {
 			defer wg2.Done()
 			for i := 0; i < 1000; i++ {
-				lc.Realise(b)
+				lc.Release(b)
 			}
 		}()
 	}
@@ -346,8 +346,8 @@ func TestLeastConn_Realise_DoesNotConsumeFreshPick(t *testing.T) {
 	snap.EXPECT().Snapshot().Return([]*model.Backend{b})
 	lc := balancer.NewLeastConn(snap)
 
-	lc.Realise(b)
-	lc.Realise(b)
+	lc.Release(b)
+	lc.Release(b)
 	require.Equal(t, int64(0), b.ActiveConns.Load())
 
 	got, err := lc.Pick()
@@ -355,7 +355,7 @@ func TestLeastConn_Realise_DoesNotConsumeFreshPick(t *testing.T) {
 	assert.Same(t, b, got)
 	assert.Equal(t, int64(1), b.ActiveConns.Load())
 
-	lc.Realise(b)
+	lc.Release(b)
 	assert.Equal(t, int64(0), b.ActiveConns.Load())
 }
 
@@ -379,7 +379,7 @@ func TestLeastConn_PickRealise_Race_SingleBackend(t *testing.T) {
 				got, err := lc.Pick()
 				assert.NoError(t, err)
 				picked.Add(1)
-				lc.Realise(got)
+				lc.Release(got)
 			}
 		}()
 	}

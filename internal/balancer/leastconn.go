@@ -39,7 +39,7 @@ func (lc *LeastConn) Pick() (*model.Backend, error) {
 	return best, nil
 }
 
-func (lc *LeastConn) Realise(b *model.Backend) {
+func (lc *LeastConn) Release(b *model.Backend) {
 	if b == nil {
 		return
 	}
