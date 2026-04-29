@@ -11,3 +11,8 @@ packages:
     interfaces:
       Sourcer:
       Snapshotter:
+
+  github.com/sanchey92/flowgate/internal/proxy/tcp:
+    interfaces:
+      Balancer:
+      BufferPool:
