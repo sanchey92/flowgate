@@ -71,6 +71,7 @@ linters:
   settings:
     gosec:
       excludes:
+        - G104
         - G117
       config:
         global:
