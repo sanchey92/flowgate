@@ -8,6 +8,10 @@ import (
 	"time"
 )
 
+type closeWriter interface {
+	CloseWrite() error
+}
+
 func SetKeepAlive(c net.Conn, period time.Duration) error {
 	tc, ok := c.(*net.TCPConn)
 	if !ok {
@@ -25,8 +29,8 @@ func SetKeepAlive(c net.Conn, period time.Duration) error {
 }
 
 func CloseWrite(c net.Conn) error {
-	if tc, ok := c.(*net.TCPConn); ok {
-		if err := tc.CloseWrite(); err != nil {
+	if cw, ok := c.(closeWriter); ok {
+		if err := cw.CloseWrite(); err != nil {
 			return fmt.Errorf("tcp: close write: %w", err)
 		}
 		return nil
@@ -42,7 +46,7 @@ func SetDeadlines(c net.Conn, idle time.Duration) error {
 		return nil
 	}
 	if err := c.SetReadDeadline(time.Now().Add(idle)); err != nil {
-		return fmt.Errorf("tcp; set deadline: %w", err)
+		return fmt.Errorf("tcp: set deadline: %w", err)
 	}
 	return nil
 }

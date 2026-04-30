@@ -92,7 +92,7 @@ func TestPipePair_BidirectionalSucceeds(t *testing.T) {
 		readOnA, _ = io.ReadAll(clientA)
 	}()
 
-	bytesAB, bytesBA, err := tcp.PipePair(context.Background(), serverA, serverB, newPool(t))
+	bytesAB, bytesBA, err := tcp.PipePair(context.Background(), serverA, serverB, newPool(t), 0)
 	require.NoError(t, err)
 
 	readWG.Wait()
@@ -113,7 +113,7 @@ func TestPipePair_ContextCancelClosesConnections(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		_, _, _ = tcp.PipePair(ctx, serverA, serverB, newPool(t))
+		_, _, _ = tcp.PipePair(ctx, serverA, serverB, newPool(t), 0)
 		close(done)
 	}()
 
@@ -151,7 +151,7 @@ func TestPipePair_AlreadyCancelledContextReturnsImmediately(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		_, _, _ = tcp.PipePair(ctx, serverA, serverB, newPool(t))
+		_, _, _ = tcp.PipePair(ctx, serverA, serverB, newPool(t), 0)
 		close(done)
 	}()
 
@@ -171,7 +171,7 @@ func TestPipePair_BothSidesEOFReturnsZeroNoError(t *testing.T) {
 	require.NoError(t, clientA.Close())
 	require.NoError(t, clientB.Close())
 
-	bytesAB, bytesBA, err := tcp.PipePair(context.Background(), serverA, serverB, newPool(t))
+	bytesAB, bytesBA, err := tcp.PipePair(context.Background(), serverA, serverB, newPool(t), 0)
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), bytesAB)
 	assert.Equal(t, int64(0), bytesBA)
@@ -197,7 +197,7 @@ func TestPipePair_BufferPoolGetPutBalanced(t *testing.T) {
 		puts.Add(1)
 	}).Return()
 
-	_, _, err := tcp.PipePair(context.Background(), serverA, serverB, p)
+	_, _, err := tcp.PipePair(context.Background(), serverA, serverB, p, 0)
 	require.NoError(t, err)
 
 	assert.Equal(t, int64(2), gets.Load(), "Get must be called once per direction")
