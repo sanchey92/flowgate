@@ -104,6 +104,19 @@ linters:
       require-explanation: true
       require-specific: true
 
+    wrapcheck:
+      ignore-sigs:
+        - .Errorf(
+        - errors.New(
+        - errors.Unwrap(
+        - errors.Join(
+        - .Wrap(
+        - .Wrapf(
+        - .WithMessage(
+        - .WithMessagef(
+        - .WithStack(
+        - .Err()
+
     forbidigo:
       exclude-godoc-examples: true
       analyze-types: true
