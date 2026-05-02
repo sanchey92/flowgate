@@ -34,16 +34,16 @@ func (b *Exponential) Reset() {
 	b.current = b.base
 }
 
-func (b *Exponential) Wait(ctx context.Context) bool {
+func (b *Exponential) Wait(ctx context.Context) error {
 	timer := time.NewTimer(b.current)
 	defer timer.Stop()
 
 	select {
 	case <-timer.C:
 		b.current = minDuration(b.current*2, b.max)
-		return true
+		return nil
 	case <-ctx.Done():
-		return false
+		return ctx.Err()
 	}
 }
 

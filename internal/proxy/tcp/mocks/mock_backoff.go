@@ -101,18 +101,18 @@ func (_c *Backoff_Reset_Call) RunAndReturn(run func()) *Backoff_Reset_Call {
 }
 
 // Wait provides a mock function with given fields: ctx
-func (_m *Backoff) Wait(ctx context.Context) bool {
+func (_m *Backoff) Wait(ctx context.Context) error {
 	ret := _m.Called(ctx)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Wait")
 	}
 
-	var r0 bool
-	if rf, ok := ret.Get(0).(func(context.Context) bool); ok {
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context) error); ok {
 		r0 = rf(ctx)
 	} else {
-		r0 = ret.Get(0).(bool)
+		r0 = ret.Error(0)
 	}
 
 	return r0
@@ -136,12 +136,12 @@ func (_c *Backoff_Wait_Call) Run(run func(ctx context.Context)) *Backoff_Wait_Ca
 	return _c
 }
 
-func (_c *Backoff_Wait_Call) Return(_a0 bool) *Backoff_Wait_Call {
+func (_c *Backoff_Wait_Call) Return(_a0 error) *Backoff_Wait_Call {
 	_c.Call.Return(_a0)
 	return _c
 }
 
-func (_c *Backoff_Wait_Call) RunAndReturn(run func(context.Context) bool) *Backoff_Wait_Call {
+func (_c *Backoff_Wait_Call) RunAndReturn(run func(context.Context) error) *Backoff_Wait_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -13,15 +13,15 @@ func NewConcurrency(limit int) *Concurrency {
 	return &Concurrency{sem: make(chan struct{}, limit)}
 }
 
-func (c *Concurrency) Acquire(ctx context.Context) bool {
+func (c *Concurrency) Acquire(ctx context.Context) error {
 	if c.sem == nil {
-		return true
+		return nil
 	}
 	select {
 	case c.sem <- struct{}{}:
-		return true
+		return nil
 	case <-ctx.Done():
-		return false
+		return ctx.Err()
 	}
 }
 

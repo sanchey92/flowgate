@@ -70,7 +70,7 @@ func (r *idleReader) Read(p []byte) (int, error) {
 	_ = r.c.SetReadDeadline(time.Now().Add(r.idle))
 	count, err := r.c.Read(p)
 	if err != nil {
-		return 0, fmt.Errorf("reader error: %w", err)
+		return count, fmt.Errorf("reader error: %w", err)
 	}
 	return count, nil
 }
@@ -84,7 +84,7 @@ func (w *idleWriter) Write(p []byte) (int, error) {
 	_ = w.c.SetWriteDeadline(time.Now().Add(w.idle))
 	count, err := w.c.Write(p)
 	if err != nil {
-		return 0, fmt.Errorf("writer error: %w", err)
+		return count, fmt.Errorf("writer error: %w", err)
 	}
 	return count, nil
 }

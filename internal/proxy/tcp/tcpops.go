@@ -41,16 +41,6 @@ func CloseWrite(c net.Conn) error {
 	return nil
 }
 
-func SetDeadlines(c net.Conn, idle time.Duration) error {
-	if idle <= 0 {
-		return nil
-	}
-	if err := c.SetReadDeadline(time.Now().Add(idle)); err != nil {
-		return fmt.Errorf("tcp: set deadline: %w", err)
-	}
-	return nil
-}
-
 func IsBenignClose(err error) bool {
 	if err == nil {
 		return true

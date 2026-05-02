@@ -42,7 +42,7 @@ type BufferPool interface {
 type Handler struct {
 	balancer Balancer
 	pool     BufferPool
-	timeouts *Timeouts
+	timeouts Timeouts
 	pp       ProxyProtoMode
 	log      *slog.Logger
 	dial     Dialer
@@ -51,7 +51,7 @@ type Handler struct {
 func NewHandler(
 	b Balancer,
 	pool BufferPool,
-	t *Timeouts,
+	t Timeouts,
 	pp ProxyProtoMode,
 	log *slog.Logger,
 	dial Dialer,

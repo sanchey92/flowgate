@@ -103,40 +103,6 @@ func TestCloseWrite_NonTCPFullClose(t *testing.T) {
 	assert.Error(t, err, "после closeWrite на pipe запись должна падать")
 }
 
-func TestSetDeadlines_ZeroIsNoop(t *testing.T) {
-	t.Parallel()
-
-	a, b := net.Pipe()
-	t.Cleanup(func() {
-		_ = a.Close()
-		_ = b.Close()
-	})
-
-	require.NoError(t, tcp.SetDeadlines(a, 0))
-	require.NoError(t, tcp.SetDeadlines(a, -1*time.Second))
-}
-
-func TestSetDeadlines_TimeoutFires(t *testing.T) {
-	t.Parallel()
-
-	a, b := net.Pipe()
-	t.Cleanup(func() {
-		_ = a.Close()
-		_ = b.Close()
-	})
-
-	require.NoError(t, tcp.SetDeadlines(a, 50*time.Millisecond))
-
-	buf := make([]byte, 1)
-	_, err := a.Read(buf)
-	require.Error(t, err)
-
-	var ne net.Error
-	if assert.ErrorAs(t, err, &ne) {
-		assert.True(t, ne.Timeout(), "ожидали timeout, получили: %v", err)
-	}
-}
-
 func TestIsBenignClose(t *testing.T) {
 	t.Parallel()
 

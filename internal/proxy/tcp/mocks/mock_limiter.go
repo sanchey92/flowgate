@@ -22,18 +22,18 @@ func (_m *Limiter) EXPECT() *Limiter_Expecter {
 }
 
 // Acquire provides a mock function with given fields: ctx
-func (_m *Limiter) Acquire(ctx context.Context) bool {
+func (_m *Limiter) Acquire(ctx context.Context) error {
 	ret := _m.Called(ctx)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Acquire")
 	}
 
-	var r0 bool
-	if rf, ok := ret.Get(0).(func(context.Context) bool); ok {
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context) error); ok {
 		r0 = rf(ctx)
 	} else {
-		r0 = ret.Get(0).(bool)
+		r0 = ret.Error(0)
 	}
 
 	return r0
@@ -57,12 +57,12 @@ func (_c *Limiter_Acquire_Call) Run(run func(ctx context.Context)) *Limiter_Acqu
 	return _c
 }
 
-func (_c *Limiter_Acquire_Call) Return(_a0 bool) *Limiter_Acquire_Call {
+func (_c *Limiter_Acquire_Call) Return(_a0 error) *Limiter_Acquire_Call {
 	_c.Call.Return(_a0)
 	return _c
 }
 
-func (_c *Limiter_Acquire_Call) RunAndReturn(run func(context.Context) bool) *Limiter_Acquire_Call {
+func (_c *Limiter_Acquire_Call) RunAndReturn(run func(context.Context) error) *Limiter_Acquire_Call {
 	_c.Call.Return(run)
 	return _c
 }

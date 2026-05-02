@@ -35,8 +35,8 @@ func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
-func defaultTimeouts() *tcp.Timeouts {
-	return &tcp.Timeouts{
+func defaultTimeouts() tcp.Timeouts {
+	return tcp.Timeouts{
 		Connect:         time.Second,
 		Idle:            0,
 		KeepAlivePeriod: 0,
@@ -214,7 +214,7 @@ func TestHandle_DialContextTimeout(t *testing.T) {
 		return nil, ctx.Err()
 	}
 
-	timeouts := &tcp.Timeouts{Connect: 50 * time.Millisecond}
+	timeouts := tcp.Timeouts{Connect: 50 * time.Millisecond}
 	h := tcp.NewHandler(balancer, anyPool(t), timeouts,
 		tcp.ProxyProtoOff, discardLogger(), dial)
 

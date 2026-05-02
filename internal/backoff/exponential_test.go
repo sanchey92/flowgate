@@ -17,8 +17,8 @@ func TestExponentialWaitAndReset(t *testing.T) {
 	if got := b.Duration(); got != time.Millisecond {
 		t.Fatalf("Duration() = %v, want %v", got, time.Millisecond)
 	}
-	if !b.Wait(context.Background()) {
-		t.Fatal("Wait() = false, want true")
+	if err := b.Wait(context.Background()); err != nil {
+		t.Fatalf("Wait() = %v, want nil", err)
 	}
 	if got := b.Duration(); got != 2*time.Millisecond {
 		t.Fatalf("Duration() after Wait() = %v, want %v", got, 2*time.Millisecond)
@@ -62,7 +62,7 @@ func TestExponentialWaitContextCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	if b.Wait(ctx) {
-		t.Fatal("Wait() = true, want false")
+	if err := b.Wait(ctx); err == nil {
+		t.Fatal("Wait() = nil, want error")
 	}
 }

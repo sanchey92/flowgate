@@ -12,27 +12,27 @@ func TestConcurrencyDisabled(t *testing.T) {
 	cancel()
 
 	l := limiter.NewConcurrency(0)
-	if !l.Acquire(ctx) {
-		t.Fatal("disabled limiter should acquire even with canceled context")
+	if err := l.Acquire(ctx); err != nil {
+		t.Fatalf("disabled limiter should acquire even with canceled context, got %v", err)
 	}
 	l.Release()
 }
 
 func TestConcurrencyAcquireRelease(t *testing.T) {
 	l := limiter.NewConcurrency(1)
-	if !l.Acquire(context.Background()) {
-		t.Fatal("Acquire() = false, want true")
+	if err := l.Acquire(context.Background()); err != nil {
+		t.Fatalf("Acquire() = %v, want nil", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if l.Acquire(ctx) {
-		t.Fatal("Acquire() on full limiter with canceled context = true, want false")
+	if err := l.Acquire(ctx); err == nil {
+		t.Fatal("Acquire() on full limiter with canceled context = nil, want error")
 	}
 
 	l.Release()
-	if !l.Acquire(context.Background()) {
-		t.Fatal("Acquire() after Release() = false, want true")
+	if err := l.Acquire(context.Background()); err != nil {
+		t.Fatalf("Acquire() after Release() = %v, want nil", err)
 	}
 	l.Release()
 }
