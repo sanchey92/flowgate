@@ -16,3 +16,6 @@ packages:
     interfaces:
       Balancer:
       BufferPool:
+      Stream:
+      Limiter:
+      Backoff:
