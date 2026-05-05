@@ -19,3 +19,7 @@ packages:
       Stream:
       Limiter:
       Backoff:
+
+  github.com/sanchey92/flowgate/internal/proxy/udp:
+    interfaces:
+      Balancer:
