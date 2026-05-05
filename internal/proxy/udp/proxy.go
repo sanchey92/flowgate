@@ -201,7 +201,7 @@ func (p *Proxy) forward(ctx context.Context, conn *net.UDPConn, client netip.Add
 
 	if created {
 		p.wg.Add(1)
-		//nolint:contextcheck // life-cycle управляется через listenConn.Close + sess.Close
+
 		go p.replyLoop(ctx, conn, sess)
 	}
 
