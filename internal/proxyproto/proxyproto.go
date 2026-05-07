@@ -9,7 +9,7 @@ import (
 type Mode int
 
 const (
-	ModeIff Mode = iota
+	ModeOff Mode = iota
 	ModeV1
 	ModeV2
 	ModeAuto
@@ -45,7 +45,7 @@ func (h *Header) IsLocal() bool {
 func ParseMode(s string) (Mode, error) {
 	switch strings.ToLower(s) {
 	case "", "off":
-		return ModeIff, nil
+		return ModeOff, nil
 	case "v1":
 		return ModeV1, nil
 	case "v2":
