@@ -1,6 +1,8 @@
 package proxyproto
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"net/netip"
 	"strings"
@@ -40,6 +42,44 @@ type Header struct {
 
 func (h *Header) IsLocal() bool {
 	return h.Command == CommandLocal
+}
+
+const minBuffSize = 1024
+
+func DetectAndStrip(r *bufio.Reader, mode Mode) (*Header, error) {
+	if mode == ModeOff {
+		return nil, nil
+	}
+
+	if r.Size() < minBuffSize {
+		return nil, fmt.Errorf("proxyproto: bufio reader too small: %d < %d",
+			r.Size(), minBuffSize)
+	}
+
+	switch mode {
+	case ModeOff:
+		return nil, nil
+	case ModeV1:
+		return parseV1(r)
+	case ModeV2:
+		return parseV2(r)
+	case ModeAuto:
+		return detectAuto(r)
+	default:
+		return nil, fmt.Errorf("proxyproto: unknown mode %d", mode)
+	}
+}
+
+func detectAuto(r *bufio.Reader) (*Header, error) {
+	if peek, err := r.Peek(v2SigLen); err == nil && bytes.Equal(peek, sigV2[:]) {
+		return parseV2(r)
+	}
+
+	if peek, err := r.Peek(len(sigV1)); err == nil && string(peek) == sigV1 {
+		return parseV1(r)
+	}
+
+	return nil, nil
 }
 
 func ParseMode(s string) (Mode, error) {
