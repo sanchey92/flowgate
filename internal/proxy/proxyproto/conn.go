@@ -53,3 +53,16 @@ func (c *taggedConn) LocalAddr() net.Addr {
 	}
 	return c.Conn.LocalAddr()
 }
+
+func (c *taggedConn) CloseWrite() error {
+	if cw, ok := c.Conn.(interface{ CloseWrite() error }); ok {
+		if err := cw.CloseWrite(); err != nil {
+			return fmt.Errorf("proxyproto tagged conn: close write: %w", err)
+		}
+		return nil
+	}
+	if err := c.Close(); err != nil {
+		return fmt.Errorf("proxyproto tagged conn: close (no half-close): %w", err)
+	}
+	return nil
+}
