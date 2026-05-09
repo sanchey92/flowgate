@@ -3,11 +3,11 @@ package tcp_test
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"io"
 	"log/slog"
 	"net"
-	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/sanchey92/flowgate/internal/domain/model"
+	"github.com/sanchey92/flowgate/internal/proxy/proxyproto"
 	"github.com/sanchey92/flowgate/internal/proxy/tcp"
 	"github.com/sanchey92/flowgate/internal/proxy/tcp/mocks"
 )
@@ -78,7 +79,7 @@ func TestNewHandler_NilDialer_UsesNetDialer(t *testing.T) {
 	balancer.EXPECT().Pick().Return(be, nil)
 	balancer.EXPECT().Release(be).Return()
 
-	h := tcp.NewHandler(balancer, anyPool(t), defaultTimeouts(), tcp.ProxyProtoOff, discardLogger(), nil)
+	h := tcp.NewHandler(balancer, anyPool(t), defaultTimeouts(), proxyproto.ModeOff, 0, discardLogger(), nil)
 
 	proxyClient, externalClient := tcpPair(t)
 	require.NoError(t, externalClient.Close()) // EOF на стороне клиента
@@ -106,7 +107,7 @@ func TestNewHandler_ProxyProtoOff_NoStartupWarn(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	balancer := mocks.NewBalancer(t)
-	_ = tcp.NewHandler(balancer, anyPool(t), defaultTimeouts(), tcp.ProxyProtoOff, log, nil)
+	_ = tcp.NewHandler(balancer, anyPool(t), defaultTimeouts(), proxyproto.ModeOff, 0, log, nil)
 
 	assert.NotContains(t, buf.String(), "proxy protocol",
 		"при ProxyProtoOff не должно быть warn про proxy protocol")
@@ -124,7 +125,7 @@ func TestHandle_HappyPath_BidirectionalForwarding(t *testing.T) {
 	balancer.EXPECT().Release(be).Return()
 
 	h := tcp.NewHandler(balancer, newPool(t), defaultTimeouts(),
-		tcp.ProxyProtoOff, discardLogger(), dialerReturning(backendProxy))
+		proxyproto.ModeOff, 0, discardLogger(), dialerReturning(backendProxy))
 
 	handleDone := make(chan struct{})
 	go func() {
@@ -158,7 +159,7 @@ func TestHandle_PickError_DropsClientNoRelease(t *testing.T) {
 	balancer.EXPECT().Pick().Return(nil, errors.New("no backends"))
 
 	h := tcp.NewHandler(balancer, anyPool(t), defaultTimeouts(),
-		tcp.ProxyProtoOff, discardLogger(), nil)
+		proxyproto.ModeOff, 0, discardLogger(), nil)
 
 	proxyClient, externalClient := tcpPair(t)
 
@@ -188,7 +189,7 @@ func TestHandle_DialError_ReleasesBackend(t *testing.T) {
 	}
 
 	h := tcp.NewHandler(balancer, anyPool(t), defaultTimeouts(),
-		tcp.ProxyProtoOff, discardLogger(), dial)
+		proxyproto.ModeOff, 0, discardLogger(), dial)
 
 	proxyClient, _ := tcpPair(t)
 
@@ -216,7 +217,7 @@ func TestHandle_DialContextTimeout(t *testing.T) {
 
 	timeouts := tcp.Timeouts{Connect: 50 * time.Millisecond}
 	h := tcp.NewHandler(balancer, anyPool(t), timeouts,
-		tcp.ProxyProtoOff, discardLogger(), dial)
+		proxyproto.ModeOff, 0, discardLogger(), dial)
 
 	proxyClient, _ := tcpPair(t)
 
@@ -242,7 +243,7 @@ func TestHandle_ContextCancel_TerminatesPipe(t *testing.T) {
 	balancer.EXPECT().Release(be).Return()
 
 	h := tcp.NewHandler(balancer, newPool(t), defaultTimeouts(),
-		tcp.ProxyProtoOff, discardLogger(), dialerReturning(backendProxy))
+		proxyproto.ModeOff, 0, discardLogger(), dialerReturning(backendProxy))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -259,11 +260,8 @@ func TestHandle_ContextCancel_TerminatesPipe(t *testing.T) {
 	waitDone(t, done, 2*time.Second, "Handle did not return after ctx cancel")
 }
 
-func TestHandle_ProxyProtoEnabled_StartupWarnButNotPerCall(t *testing.T) {
+func TestHandle_ProxyProtoV2_HeaderStrippedAndForwarded(t *testing.T) {
 	t.Parallel()
-
-	var buf bytes.Buffer
-	log := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
 	proxyClient, externalClient := tcpPair(t)
 	backendProxy, backendSide := tcpPair(t)
@@ -274,13 +272,7 @@ func TestHandle_ProxyProtoEnabled_StartupWarnButNotPerCall(t *testing.T) {
 	balancer.EXPECT().Release(be).Return()
 
 	h := tcp.NewHandler(balancer, newPool(t), defaultTimeouts(),
-		tcp.ProxyProtoV2, log, dialerReturning(backendProxy))
-
-	require.Equal(t, 1,
-		strings.Count(buf.String(), "proxy protocol mode is not implemented"),
-		"warn про proxy protocol должен появиться ровно один раз — при создании Handler")
-
-	buf.Reset()
+		proxyproto.ModeV2, time.Second, discardLogger(), dialerReturning(backendProxy))
 
 	handleDone := make(chan struct{})
 	go func() {
@@ -288,12 +280,98 @@ func TestHandle_ProxyProtoEnabled_StartupWarnButNotPerCall(t *testing.T) {
 		close(handleDone)
 	}()
 
-	// быстрый разрыв с обеих сторон, чтобы Handle вышел
-	require.NoError(t, externalClient.Close())
-	require.NoError(t, backendSide.Close())
+	frame := buildProxyProtoV2IPv4Frame([4]byte{1, 2, 3, 4}, [4]byte{5, 6, 7, 8}, 1234, 5678)
+	_, err := externalClient.Write(append(frame, []byte("ping")...))
+	require.NoError(t, err)
+	require.NoError(t, tcp.CloseWrite(externalClient))
 
-	waitDone(t, handleDone, 2*time.Second, "Handle did not return")
+	backendIn, err := io.ReadAll(backendSide)
+	require.NoError(t, err)
+	assert.Equal(t, "ping", string(backendIn),
+		"PROXY-заголовок должен быть отрезан до пайпа на бэкенд")
 
-	assert.NotContains(t, buf.String(), "proxy protocol",
-		"Handle не должен логировать proxy proto warn на каждое соединение")
+	_, err = backendSide.Write([]byte("pong"))
+	require.NoError(t, err)
+	require.NoError(t, tcp.CloseWrite(backendSide))
+
+	externalIn, err := io.ReadAll(externalClient)
+	require.NoError(t, err)
+	assert.Equal(t, "pong", string(externalIn))
+
+	waitDone(t, handleDone, 2*time.Second, "Handle did not return after both halves closed")
+}
+
+func TestHandle_ProxyProtoV2_InvalidHeaderDropsConnection(t *testing.T) {
+	t.Parallel()
+
+	proxyClient, externalClient := tcpPair(t)
+
+	balancer := mocks.NewBalancer(t)
+	dial := func(_ context.Context, _, _ string) (net.Conn, error) {
+		t.Fatal("dial не должен вызываться при ошибке парсинга PROXY-заголовка")
+		return nil, nil
+	}
+
+	h := tcp.NewHandler(balancer, anyPool(t), defaultTimeouts(),
+		proxyproto.ModeV2, 100*time.Millisecond, discardLogger(), dial)
+
+	handleDone := make(chan struct{})
+	go func() {
+		h.Handle(context.Background(), proxyClient)
+		close(handleDone)
+	}()
+
+	_, err := externalClient.Write([]byte("GET / HTTP/1.1\r\n\r\n"))
+	require.NoError(t, err)
+
+	waitDone(t, handleDone, 2*time.Second, "Handle did not return after PP parse failure")
+
+	require.NoError(t, externalClient.SetReadDeadline(time.Now().Add(time.Second)))
+	_, err = externalClient.Read(make([]byte, 1))
+	assert.Error(t, err, "клиентское соединение должно быть закрыто после невалидного PP")
+}
+
+func TestHandle_ProxyProtoV2_HeaderTimeoutDropsConnection(t *testing.T) {
+	t.Parallel()
+
+	proxyClient, externalClient := tcpPair(t)
+	t.Cleanup(func() { _ = externalClient.Close() })
+
+	balancer := mocks.NewBalancer(t)
+	dial := func(_ context.Context, _, _ string) (net.Conn, error) {
+		t.Fatal("dial не должен вызываться при таймауте PROXY-заголовка")
+		return nil, nil
+	}
+
+	h := tcp.NewHandler(balancer, anyPool(t), defaultTimeouts(),
+		proxyproto.ModeV2, 50*time.Millisecond, discardLogger(), dial)
+
+	start := time.Now()
+	handleDone := make(chan struct{})
+	go func() {
+		h.Handle(context.Background(), proxyClient)
+		close(handleDone)
+	}()
+
+	waitDone(t, handleDone, time.Second, "Handle did not return after PP header timeout")
+	assert.GreaterOrEqual(t, time.Since(start), 50*time.Millisecond,
+		"Handle обязан соблюдать ppHdrTimeout до закрытия")
+}
+
+func buildProxyProtoV2IPv4Frame(srcIP, dstIP [4]byte, srcPort, dstPort uint16) []byte {
+	sig := []byte{0x0D, 0x0A, 0x0D, 0x0A, 0x00, 0x0D, 0x0A, 0x51, 0x55, 0x49, 0x54, 0x0A}
+
+	body := make([]byte, 0, 12)
+	body = append(body, srcIP[:]...)
+	body = append(body, dstIP[:]...)
+	body = binary.BigEndian.AppendUint16(body, srcPort)
+	body = binary.BigEndian.AppendUint16(body, dstPort)
+
+	out := make([]byte, 0, len(sig)+4+len(body))
+	out = append(out, sig...)
+	out = append(out, 0x21) // version=2 (0x2<<4) | command=PROXY (0x1)
+	out = append(out, 0x11) // family=AF_INET (0x1<<4) | transport=STREAM (0x1)
+	out = binary.BigEndian.AppendUint16(out, uint16(len(body)))
+	out = append(out, body...)
+	return out
 }
