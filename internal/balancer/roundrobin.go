@@ -55,3 +55,5 @@ func (rr *RoundRobin) Pick() (*model.Backend, error) {
 	rr.cw[bestIdx] -= total
 	return backends[bestIdx], nil
 }
+
+func (rr *RoundRobin) Release(_ *model.Backend) {}

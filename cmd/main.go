@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"log/slog"
+	"os"
 
 	"github.com/sanchey92/flowgate/internal/app"
 	"github.com/sanchey92/flowgate/internal/config"
@@ -13,6 +15,7 @@ func main() {
 	a := app.New(cfg)
 
 	if err := a.Run(context.Background()); err != nil {
-		panic("failed to run app" + err.Error())
+		slog.Error("app exited with error", slog.Any("error", err))
+		os.Exit(1)
 	}
 }

@@ -12,7 +12,7 @@ const (
 
 var version = "dev"
 
-func Setup(env, level string) *slog.Logger {
+func Setup(env, level, instanceID string) *slog.Logger {
 	lvl := parseLevel(level)
 
 	opts := &slog.HandlerOptions{Level: lvl}
@@ -24,9 +24,13 @@ func Setup(env, level string) *slog.Logger {
 		handler = slog.NewTextHandler(os.Stdout, opts)
 	}
 
+	if instanceID == "" {
+		instanceID = hostname()
+	}
+
 	log := slog.New(handler).With(
 		slog.String("version", version),
-		slog.String("instance_id", instanceID()),
+		slog.String("instance_id", instanceID),
 	)
 
 	slog.SetDefault(log)
@@ -49,7 +53,7 @@ func parseLevel(level string) slog.Level {
 	}
 }
 
-func instanceID() string {
+func hostname() string {
 	host, err := os.Hostname()
 	if err != nil {
 		return "unknown"
