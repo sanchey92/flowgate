@@ -1,4 +1,4 @@
-.PHONY: build run test test-ci test-coverage lint vet fmt fmt-check tidy-check ci clean mocks
+.PHONY: build run test test-ci test-integration test-coverage lint vet fmt fmt-check tidy-check ci clean mocks
 
 APP_NAME := flowgate
 BUILD_DIR := bin
@@ -38,6 +38,9 @@ test:
 test-ci:
 	go test -race -shuffle=on -timeout=5m -covermode=atomic -coverprofile=coverage.out ./...
 
+test-integration:
+	go test -tags integration -race -timeout=5m ./tests/integration/...
+
 test-coverage: test
 	go tool cover -func=coverage.out
 
@@ -66,7 +69,7 @@ tidy-check:
 mocks: $(MOCKERY)
 	$(MOCKERY)
 
-ci: tidy-check fmt-check vet lint test-ci build
+ci: tidy-check fmt-check vet lint test-ci test-integration build
 
 clean:
 	rm -rf $(BUILD_DIR)

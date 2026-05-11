@@ -59,7 +59,7 @@ jobs:
         run: make lint
 
   test:
-    name: Test
+    name: Test (unit)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -71,7 +71,7 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Run tests
+      - name: Run unit tests
         run: make test-ci
 
       - name: Coverage summary
@@ -86,11 +86,27 @@ jobs:
             coverage.txt
           retention-days: 7
 
+  integration-test:
+    name: Test (integration)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run integration tests
+        run: make test-integration
+
   build:
     name: Build
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [lint, test]
+    needs: [lint, test, integration-test]
     steps:
       - uses: actions/checkout@v6
 
