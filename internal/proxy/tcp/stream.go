@@ -45,6 +45,10 @@ func pipe(dst, src net.Conn, pool BufferPool, idle time.Duration) (int64, error)
 	bp := pool.Get()
 	defer pool.Put(bp)
 
+	// Pool may hand back a buffer with len=0 (Put resets length).
+	// io.CopyBuffer panics on an empty buffer — re-extend to full capacity.
+	buf := (*bp)[:cap(*bp)]
+
 	var (
 		r io.Reader = src
 		w io.Writer = dst
@@ -54,7 +58,7 @@ func pipe(dst, src net.Conn, pool BufferPool, idle time.Duration) (int64, error)
 		w = &idleWriter{c: dst, idle: idle}
 	}
 
-	n, err := io.CopyBuffer(w, r, *bp)
+	n, err := io.CopyBuffer(w, r, buf)
 	if IsBenignClose(err) {
 		return n, nil
 	}
