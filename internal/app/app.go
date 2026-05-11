@@ -13,7 +13,6 @@ import (
 	"github.com/sanchey92/flowgate/internal/proxy"
 	"github.com/sanchey92/flowgate/internal/registry"
 	"github.com/sanchey92/flowgate/pkg/closer"
-	"github.com/sanchey92/flowgate/pkg/logger"
 )
 
 type App struct {
@@ -21,8 +20,7 @@ type App struct {
 	log *slog.Logger
 }
 
-func New(cfg *config.Config) *App {
-	log := logger.Setup(cfg.Env, cfg.LogLevel, cfg.Server.InstanceID)
+func New(cfg *config.Config, log *slog.Logger) *App {
 	return &App{cfg: cfg, log: log}
 }
 
@@ -64,7 +62,7 @@ func (a *App) startRoute(ctx context.Context, c *closer.Closer, r config.Route) 
 
 	p, err := proxy.New(r, settings, bal, routeLog)
 	if err != nil {
-		return fmt.Errorf("app: route %q: proxy: %w", r.Name, err)
+		return fmt.Errorf("app: route %q: %w", r.Name, err)
 	}
 
 	if err := p.Start(ctx); err != nil {

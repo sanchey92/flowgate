@@ -32,6 +32,13 @@ type Defaults struct {
 	ProxyProtoHdrTimeout time.Duration `yaml:"proxyproto_header_timeout" env-default:"3s"`
 	Backoff              Backoff       `yaml:"backoff"`
 	UDP                  UDPDefaults   `yaml:"udp"`
+	HTTP                 HTTPDefaults  `yaml:"http"`
+}
+
+type HTTPDefaults struct {
+	ResponseHeaderTimeout time.Duration `yaml:"response_header_timeout" env-default:"30s"`
+	WriteTimeout          time.Duration `yaml:"write_timeout" env-default:"0s"`
+	ReadHeaderTimeout     time.Duration `yaml:"read_header_timeout" env-default:"5s"` // beyond task
 }
 
 type UDPDefaults struct {
@@ -46,13 +53,14 @@ type Backoff struct {
 }
 
 type Route struct {
-	Name          string    `yaml:"name"`
-	Protocol      string    `yaml:"protocol"`
-	Listen        string    `yaml:"listen"`
-	Balancer      string    `yaml:"balancer"`
-	ProxyProtocol string    `yaml:"proxy_protocol"`
-	Timeouts      Timeouts  `yaml:"timeouts"`
-	Backends      []Backend `yaml:"backends"`
+	Name          string      `yaml:"name"`
+	Protocol      string      `yaml:"protocol"`
+	Listen        string      `yaml:"listen"`
+	Balancer      string      `yaml:"balancer"`
+	ProxyProtocol string      `yaml:"proxy_protocol"`
+	Timeouts      Timeouts    `yaml:"timeouts"`
+	Backends      []Backend   `yaml:"backends"`
+	HTTP          *HTTPConfig `yaml:"http,omitempty"`
 }
 
 type Timeouts struct {

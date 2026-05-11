@@ -19,6 +19,10 @@ defaults:
     session_idle: 30s
     backend_read: 5s
     dial: 2s
+  http:
+    response_header_timeout: 30s
+    write_timeout: 0s
+    read_header_timeout: 5s
 
 routes:
   - name: tcp-edge
@@ -51,3 +55,74 @@ routes:
         weight: 1
       - addr: "127.0.0.1:9102"
         weight: 1
+
+  # TODO(stage-f): вернуть web-edge route после реализации HTTPRunner и регистрации
+  # KindHTTP в internal/proxy/factory.go. Конфиг ниже валидируется Stage A, но
+  # фабрика proxy пока не умеет http — приложение падает на старте.
+  #
+  # - name: web-edge
+  #   protocol: http
+  #   listen: ":18082"
+  #   balancer: round_robin
+  #   http:
+  #     timeouts:
+  #       response_header_timeout: 30s
+  #       read_header_timeout: 5s
+  #
+  #     standard_headers:
+  #       enabled: true
+  #       # под-флаги опущены → EffectiveSet включит все
+  #
+  #     websocket:
+  #       enabled: true
+  #
+  #     headers:
+  #       request:
+  #         add:
+  #           X-Proxy: "FlowGate"
+  #         remove:
+  #           - "X-Debug"
+  #       response:
+  #         replace:
+  #           X-Served-By: "${backend_addr}"
+  #         remove:
+  #           - "Server"
+  #           - "X-Powered-By"
+  #
+  #     backend_groups:
+  #       - name: api-v2
+  #         balancer: round_robin
+  #         backends:
+  #           - addr: "127.0.0.1:9201"
+  #             weight: 5
+  #           - addr: "127.0.0.1:9202"
+  #             weight: 5
+  #       - name: api-v1
+  #         balancer: least_conn
+  #         backends:
+  #           - addr: "127.0.0.1:9211"
+  #             weight: 1
+  #       - name: default
+  #         backends:
+  #           - addr: "127.0.0.1:9221"
+  #             weight: 1
+  #
+  #     routing_rules:
+  #       - match:
+  #           host: "api.example.com"
+  #           path_prefix: "/v2/"
+  #         backend_group: api-v2
+  #
+  #       - match:
+  #           path_regex: "^/users/\\d+$"
+  #         backend_group: api-v1
+  #
+  #       - match:
+  #           headers:
+  #             X-API-Version: "2"
+  #         backend_group: api-v2
+  #
+  #       # default — ловит всё остальное
+  #       - match:
+  #           path_prefix: "/"
+  #         backend_group: default
