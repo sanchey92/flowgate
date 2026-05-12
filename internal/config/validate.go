@@ -132,7 +132,7 @@ func validateRoutingRules(
 		if err := validateRule(rule, groups); err != nil {
 			return fmt.Errorf("routing_rules[%d]: %w", j, err)
 		}
-		if isDefaultRule(rule) {
+		if rule.Match.IsDefault() {
 			hasDefault = true
 		}
 	}
@@ -196,15 +196,6 @@ func validateMatch(m *MatchCondition) error {
 	}
 
 	return nil
-}
-
-func isDefaultRule(r *RoutingRule) bool {
-	return r.Match.PathPrefix == "/" &&
-		r.Match.Host == "" &&
-		r.Match.PathExact == "" &&
-		r.Match.PathRegex == "" &&
-		len(r.Match.Headers) == 0 &&
-		len(r.Match.QueryParams) == 0
 }
 
 func validateHeaderRules(h HeaderRules) error {

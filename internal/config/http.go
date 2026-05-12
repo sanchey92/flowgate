@@ -46,6 +46,15 @@ func (m *MatchCondition) CompiledPathRegexp() *regexp.Regexp {
 	return m.compiledPathRegex
 }
 
+func (m *MatchCondition) IsDefault() bool {
+	return m.PathPrefix == "/" &&
+		m.Host == "" &&
+		m.PathExact == "" &&
+		m.PathRegex == "" &&
+		len(m.Headers) == 0 &&
+		len(m.QueryParams) == 0
+}
+
 type HeaderRules struct {
 	Request  HeaderOp `yaml:"request"`
 	Response HeaderOp `yaml:"response"`
