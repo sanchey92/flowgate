@@ -1,7 +1,6 @@
 package config
 
 import (
-	"regexp"
 	"time"
 )
 
@@ -33,17 +32,12 @@ type RoutingRule struct {
 }
 
 type MatchCondition struct {
-	Host              string            `yaml:"host"`
-	PathExact         string            `yaml:"path_exact"`
-	PathPrefix        string            `yaml:"path_prefix"`
-	PathRegex         string            `yaml:"path_regex"`
-	Headers           map[string]string `yaml:"headers"`
-	QueryParams       map[string]string `yaml:"query_params"`
-	compiledPathRegex *regexp.Regexp
-}
-
-func (m *MatchCondition) CompiledPathRegexp() *regexp.Regexp {
-	return m.compiledPathRegex
+	Host        string            `yaml:"host"`
+	PathExact   string            `yaml:"path_exact"`
+	PathPrefix  string            `yaml:"path_prefix"`
+	PathRegex   string            `yaml:"path_regex"`
+	Headers     map[string]string `yaml:"headers"`
+	QueryParams map[string]string `yaml:"query_params"`
 }
 
 func (m *MatchCondition) IsDefault() bool {

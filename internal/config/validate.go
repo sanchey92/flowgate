@@ -188,11 +188,9 @@ func validateMatch(m *MatchCondition) error {
 	}
 
 	if m.PathRegex != "" {
-		re, err := regexp.Compile(m.PathRegex)
-		if err != nil {
+		if _, err := regexp.Compile(m.PathRegex); err != nil {
 			return fmt.Errorf("path_regex: %w", err)
 		}
-		m.compiledPathRegex = re
 	}
 
 	return nil
