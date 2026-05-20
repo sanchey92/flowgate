@@ -8,4 +8,7 @@ var (
 	ErrProxyStopped           = errors.New("proxy already stopped")
 	ErrInvalidProxyProtocol   = errors.New("invalid proxy protocol header")
 	ErrUnsupportedProtoFamily = errors.New("unsupported proxy protocol family")
+	ErrNoRoute                = errors.New("http proxy: no matching route")
+	ErrUnknownGroup           = errors.New("http proxy: unknown backend group")
+	ErrNilBackend             = errors.New("http proxy: balancer returned nil backend")
 )

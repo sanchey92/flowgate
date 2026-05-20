@@ -23,3 +23,7 @@ packages:
   github.com/sanchey92/flowgate/internal/proxy/udp:
     interfaces:
       Balancer:
+
+  github.com/sanchey92/flowgate/internal/proxy/http:
+    interfaces:
+      Balancer:

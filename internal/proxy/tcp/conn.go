@@ -3,8 +3,6 @@ package tcp
 import (
 	"bufio"
 	"context"
-	"crypto/rand"
-	"encoding/base32"
 	"fmt"
 	"log/slog"
 	"net"
@@ -12,6 +10,7 @@ import (
 
 	"github.com/sanchey92/flowgate/internal/domain/model"
 	"github.com/sanchey92/flowgate/internal/proxy/proxyproto"
+	"github.com/sanchey92/flowgate/internal/proxy/requestid"
 )
 
 type Timeouts struct {
@@ -74,7 +73,7 @@ const proxyProtoBufSize = 1024
 func (h *Handler) Handle(ctx context.Context, client net.Conn) {
 	startedAt := time.Now()
 	log := h.log.With(
-		slog.String("request_id", newRequestID()),
+		slog.String("request_id", requestid.New()),
 		slog.String("client_addr", client.RemoteAddr().String()),
 	)
 	defer func() { closeWithLog(client, log, "client") }()
@@ -173,12 +172,4 @@ func closeWithLog(c net.Conn, log *slog.Logger, label string) {
 	if err := c.Close(); err != nil && !IsBenignClose(err) {
 		log.Debug(label+" close error", slog.Any("error", err))
 	}
-}
-
-func newRequestID() string {
-	var b [12]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return fmt.Sprintf("err-%d", time.Now().UnixNano())
-	}
-	return base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(b[:])
 }
