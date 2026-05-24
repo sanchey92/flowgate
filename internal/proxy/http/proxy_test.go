@@ -50,9 +50,14 @@ func fallbackRouter(t *testing.T, group string) *router.Router {
 
 func newProxy(t *testing.T, r *router.Router, groups map[string]Balancer) (*Proxy, *bytes.Buffer) {
 	t.Helper()
+	return newProxyWithWS(t, r, groups, config.WebSocketConfig{Enabled: true})
+}
+
+func newProxyWithWS(t *testing.T, r *router.Router, groups map[string]Balancer, ws config.WebSocketConfig) (*Proxy, *bytes.Buffer) {
+	t.Helper()
 	log, buf := newTestLogger()
 	tr := BuildTransport(TransportSettings{})
-	p := New(r, groups, tr, pool.NewBufferPool(4096), config.HeaderRules{}, config.StandardHeadersConfig{}, log)
+	p := New(r, groups, tr, pool.NewBufferPool(4096), config.HeaderRules{}, config.StandardHeadersConfig{}, ws, log)
 	return p, buf
 }
 
@@ -76,7 +81,7 @@ func TestNew_WiresReverseProxy(t *testing.T) {
 	tr := BuildTransport(TransportSettings{})
 	log, _ := newTestLogger()
 
-	p := New(r, map[string]Balancer{}, tr, pool.NewBufferPool(1024), config.HeaderRules{}, config.StandardHeadersConfig{}, log)
+	p := New(r, map[string]Balancer{}, tr, pool.NewBufferPool(1024), config.HeaderRules{}, config.StandardHeadersConfig{}, config.WebSocketConfig{Enabled: true}, log)
 
 	require.NotNil(t, p)
 	assert.Same(t, tr, p.transport)
@@ -441,6 +446,53 @@ func TestServeHTTP_DoesNotReleaseWhenPickReturnsBackendWithError(t *testing.T) {
 	p.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+}
+
+// Когда WebSocket отключён конфигом, прокси должен короткозамкнуть upgrade-запрос
+// ответом 501 Not Implemented и НЕ обращаться к балансировщику.
+func TestServeHTTP_WebSocketDisabledReturns501(t *testing.T) {
+	t.Parallel()
+	bal := mocks.NewBalancer(t)
+	// Pick/Release намеренно не ожидаются.
+
+	p, _ := newProxyWithWS(t, fallbackRouter(t, "g1"), map[string]Balancer{"g1": bal}, config.WebSocketConfig{Enabled: false})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "http://example.com/ws", nil)
+	req.Header.Set("Connection", "Upgrade")
+	req.Header.Set("Upgrade", "websocket")
+
+	p.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotImplemented, w.Code)
+	assert.Equal(t, "text/plain; charset=utf-8", w.Header().Get("Content-Type"))
+	assert.Contains(t, w.Body.String(), "websocket upgrade is disabled")
+}
+
+// Обычные (не-upgrade) запросы при отключённом WebSocket должны проксироваться как раньше.
+func TestServeHTTP_WebSocketDisabledIgnoresPlainHTTP(t *testing.T) {
+	t.Parallel()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, "ok")
+	}))
+	defer upstream.Close()
+
+	addr := strings.TrimPrefix(upstream.URL, "http://")
+	backend := model.NewBackend(addr, 1, 0)
+
+	bal := mocks.NewBalancer(t)
+	bal.EXPECT().Pick().Return(backend, nil)
+	bal.EXPECT().Release(backend).Return()
+
+	p, _ := newProxyWithWS(t, fallbackRouter(t, "g1"), map[string]Balancer{"g1": bal}, config.WebSocketConfig{Enabled: false})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "http://example.com/foo", nil)
+
+	p.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "ok", w.Body.String())
 }
 
 func TestServeHTTP_UnreachableBackendReturns502(t *testing.T) {

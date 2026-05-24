@@ -32,6 +32,7 @@ type Proxy struct {
 	rp        *httputil.ReverseProxy
 	headers   *middleware.HeaderMiddleware
 	standard  *middleware.StandardHeaders
+	ws        config.WebSocketConfig
 	log       *slog.Logger
 }
 
@@ -42,6 +43,7 @@ func New(
 	pool underlyingPool,
 	headerRules config.HeaderRules,
 	stdHeaders config.StandardHeadersConfig,
+	ws config.WebSocketConfig,
 	log *slog.Logger,
 ) *Proxy {
 	p := &Proxy{
@@ -50,6 +52,7 @@ func New(
 		transport: transport,
 		headers:   middleware.NewHeaderMiddleware(headerRules, log),
 		standard:  middleware.NewStandardHeaders(stdHeaders),
+		ws:        ws,
 		log:       log,
 	}
 
@@ -151,6 +154,11 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Path:       r.URL.Path,
 		Scheme:     requestScheme(r),
 	}
+
+	if isWebSocketUpgrade(r) {
+		slot.Upgrade = "websocket"
+	}
+
 	ctx := reqctx.WithSlot(r.Context(), slot)
 	r = r.WithContext(ctx)
 
@@ -164,6 +172,13 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		p.accessLog(r, slot, rec, time.Since(startedAt))
 	}()
+
+	if slot.Upgrade == "websocket" && !p.ws.Enabled {
+		rec.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		rec.WriteHeader(http.StatusNotImplemented)
+		_, _ = rec.Write([]byte("websocket upgrade is disabled\n"))
+		return
+	}
 
 	p.rp.ServeHTTP(rec, r)
 }
@@ -192,6 +207,9 @@ func (p *Proxy) accessLog(r *http.Request, slot *reqctx.RequestSlot, rec *record
 	}
 	if slot.Backend != nil {
 		fields = append(fields, slog.String("backend", slot.Backend.Addr))
+	}
+	if slot.Upgrade != "" {
+		fields = append(fields, slog.String("upgrade", slot.Upgrade))
 	}
 	if slot.PickErr != nil {
 		fields = append(fields, slog.String("pick_error", slot.PickErr.Error()))
