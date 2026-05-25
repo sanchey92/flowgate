@@ -19,11 +19,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/sanchey92/flowgate/internal/balancer"
 	"github.com/sanchey92/flowgate/internal/config"
-	"github.com/sanchey92/flowgate/internal/domain/model"
 	"github.com/sanchey92/flowgate/internal/proxy"
-	"github.com/sanchey92/flowgate/internal/registry"
 )
 
 func discardLogger() *slog.Logger {
@@ -123,17 +120,9 @@ func testDefaults() config.Defaults {
 func startProxy(t *testing.T, ctx context.Context, r config.Route, log *slog.Logger) proxy.Runner {
 	t.Helper()
 
-	backends := make([]*model.Backend, 0, len(r.Backends))
-	for i, b := range r.Backends {
-		backends = append(backends, model.NewBackend(b.Addr, b.Weight, i))
-	}
-	reg := registry.NewInMemory(backends)
-
-	bal, err := balancer.New(r.Balancer, reg)
-	require.NoError(t, err)
-
-	settings := r.Effective(testDefaults())
-	p, err := proxy.New(r, settings, bal, log)
+	defaults := testDefaults()
+	settings := r.Effective(defaults)
+	p, err := proxy.New(r, defaults, settings, log)
 	require.NoError(t, err)
 
 	require.NoError(t, p.Start(ctx))

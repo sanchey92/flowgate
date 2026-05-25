@@ -10,11 +10,13 @@ import (
 	"github.com/sanchey92/flowgate/internal/backoff"
 	"github.com/sanchey92/flowgate/internal/balancer"
 	"github.com/sanchey92/flowgate/internal/config"
+	"github.com/sanchey92/flowgate/internal/domain/model"
 	"github.com/sanchey92/flowgate/internal/limiter"
 	"github.com/sanchey92/flowgate/internal/pool"
 	"github.com/sanchey92/flowgate/internal/proxy/proxyproto"
 	"github.com/sanchey92/flowgate/internal/proxy/tcp"
 	"github.com/sanchey92/flowgate/internal/proxy/udp"
+	"github.com/sanchey92/flowgate/internal/registry"
 )
 
 type Runner interface {
@@ -31,22 +33,30 @@ var (
 type Kind string
 
 const (
-	KindTCP Kind = "tcp"
-	KindUDP Kind = "udp"
+	KindTCP  Kind = "tcp"
+	KindUDP  Kind = "udp"
+	KindHTTP Kind = "http"
 )
 
-func New(r config.Route, s config.Settings, bal balancer.Balancer, log *slog.Logger) (Runner, error) {
+func New(r config.Route, defaults config.Defaults, s config.Settings, log *slog.Logger) (Runner, error) {
 	switch Kind(strings.ToLower(strings.TrimSpace(r.Protocol))) {
 	case KindTCP:
-		return newTCP(r, s, bal, log)
+		return newTCP(r, s, log)
 	case KindUDP:
-		return newUDP(r, s, bal, log), nil
+		return newUDP(r, s, log)
+	case KindHTTP:
+		return newHTTP(r, defaults, s, log)
 	default:
 		return nil, fmt.Errorf("proxy: route %q: unknown protocol %q", r.Name, r.Protocol)
 	}
 }
 
-func newTCP(r config.Route, s config.Settings, bal balancer.Balancer, log *slog.Logger) (Runner, error) {
+func newTCP(r config.Route, s config.Settings, log *slog.Logger) (Runner, error) {
+	bal, err := buildBalancer(r.Name, r.Balancer, r.Backends)
+	if err != nil {
+		return nil, err
+	}
+
 	bo, err := backoff.NewExponential(s.Backoff.Base, s.Backoff.Max)
 	if err != nil {
 		return nil, fmt.Errorf("proxy: route %q: backoff: %w", r.Name, err)
@@ -77,7 +87,12 @@ func newTCP(r config.Route, s config.Settings, bal balancer.Balancer, log *slog.
 	return tcp.New(r.Name, r.Listen, handler, lim, &bo, log), nil
 }
 
-func newUDP(r config.Route, s config.Settings, bal balancer.Balancer, log *slog.Logger) Runner {
+func newUDP(r config.Route, s config.Settings, log *slog.Logger) (Runner, error) {
+	bal, err := buildBalancer(r.Name, r.Balancer, r.Backends)
+	if err != nil {
+		return nil, err
+	}
+
 	return udp.New(
 		r.Name,
 		r.Listen,
@@ -89,5 +104,26 @@ func newUDP(r config.Route, s config.Settings, bal balancer.Balancer, log *slog.
 		},
 		log,
 		nil,
-	)
+	), nil
+}
+
+func buildBalancer(routeName, kind string, backends []config.Backend) (balancer.Balancer, error) {
+	if len(backends) == 0 {
+		return nil, fmt.Errorf("proxy: route %q: no backends", routeName)
+	}
+	models := buildBackends(backends)
+	reg := registry.NewInMemory(models)
+	bal, err := balancer.New(kind, reg)
+	if err != nil {
+		return nil, fmt.Errorf("proxy: route %q: balancer: %w", routeName, err)
+	}
+	return bal, nil
+}
+
+func buildBackends(in []config.Backend) []*model.Backend {
+	out := make([]*model.Backend, 0, len(in))
+	for i, b := range in {
+		out = append(out, model.NewBackend(b.Addr, b.Weight, i))
+	}
+	return out
 }

@@ -7,11 +7,8 @@ import (
 	"log/slog"
 	"syscall"
 
-	"github.com/sanchey92/flowgate/internal/balancer"
 	"github.com/sanchey92/flowgate/internal/config"
-	"github.com/sanchey92/flowgate/internal/domain/model"
 	"github.com/sanchey92/flowgate/internal/proxy"
-	"github.com/sanchey92/flowgate/internal/registry"
 	"github.com/sanchey92/flowgate/pkg/closer"
 )
 
@@ -49,18 +46,10 @@ func (a *App) Run(ctx context.Context) error {
 }
 
 func (a *App) startRoute(ctx context.Context, c *closer.Closer, r config.Route) error {
-	backends := buildBackends(r.Backends)
-	reg := registry.NewInMemory(backends)
-
-	bal, err := balancer.New(r.Balancer, reg)
-	if err != nil {
-		return fmt.Errorf("app: route %q: balancer: %w", r.Name, err)
-	}
-
 	settings := r.Effective(a.cfg.Defaults)
 	routeLog := a.log.With(slog.String("route", r.Name))
 
-	p, err := proxy.New(r, settings, bal, routeLog)
+	p, err := proxy.New(r, a.cfg.Defaults, settings, routeLog)
 	if err != nil {
 		return fmt.Errorf("app: route %q: %w", r.Name, err)
 	}
@@ -79,8 +68,6 @@ func (a *App) startRoute(ctx context.Context, c *closer.Closer, r config.Route) 
 	routeLog.Info("route started",
 		slog.String("protocol", r.Protocol),
 		slog.String("listen", p.Addr().String()),
-		slog.String("balancer", r.Balancer),
-		slog.Int("backends", len(backends)),
 	)
 	return nil
 }
@@ -89,12 +76,4 @@ func (a *App) shutdown(parent context.Context, c *closer.Closer) {
 	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(parent), a.cfg.Server.ShutdownTimeout)
 	defer cancel()
 	_ = c.Close(shutdownCtx)
-}
-
-func buildBackends(in []config.Backend) []*model.Backend {
-	out := make([]*model.Backend, 0, len(in))
-	for i, b := range in {
-		out = append(out, model.NewBackend(b.Addr, b.Weight, i))
-	}
-	return out
 }
