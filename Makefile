@@ -1,4 +1,4 @@
-.PHONY: build run test test-ci test-integration test-coverage lint vet fmt fmt-check tidy-check ci clean mocks
+.PHONY: build run test test-ci test-integration test-coverage bench lint vet fmt fmt-check tidy-check ci clean mocks
 
 APP_NAME := flowgate
 BUILD_DIR := bin
@@ -43,6 +43,9 @@ test-integration:
 
 test-coverage: test
 	go tool cover -func=coverage.out
+
+bench:
+	go test -run=^$$ -bench=. -benchmem -benchtime=2s ./internal/proxy/http/...
 
 lint: $(GOLANGCI_LINT)
 	$(GOLANGCI_LINT) run ./...

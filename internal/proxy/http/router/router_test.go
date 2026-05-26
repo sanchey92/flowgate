@@ -337,6 +337,83 @@ func TestRoute_DefaultIsExactRootOnly(t *testing.T) {
 	}
 }
 
+// TestRoute_TableDriven_CombinedScenarios — широкая таблица, закрывающая
+// комбинации host/path/headers/query, которые приоритетные тесты выше
+// специально не трогают. Один билдер, один набор правил, много кейсов.
+func TestRoute_TableDriven_CombinedScenarios(t *testing.T) {
+	t.Parallel()
+
+	rules := mkRules(
+		// exact corner-case: точный "/" — не fallback, но всё равно exact-bucket.
+		config.RoutingRule{Match: config.MatchCondition{PathExact: "/"}, BackendGroup: "g-root-exact"},
+		// host + regex
+		config.RoutingRule{
+			Match:        config.MatchCondition{Host: "api.example.com", PathRegex: `^/v\d+/users/\d+$`},
+			BackendGroup: "g-api-users",
+		},
+		// host + query
+		config.RoutingRule{
+			Match:        config.MatchCondition{Host: "shop.example.com", QueryParams: map[string]string{"v": "2"}},
+			BackendGroup: "g-shop-v2",
+		},
+		// prefix с трейлинг-слешем
+		config.RoutingRule{Match: config.MatchCondition{PathPrefix: "/static/"}, BackendGroup: "g-static"},
+		// длинный prefix
+		config.RoutingRule{Match: config.MatchCondition{PathPrefix: "/api/v1"}, BackendGroup: "g-api-v1"},
+		// header-only
+		config.RoutingRule{
+			Match:        config.MatchCondition{Headers: map[string]string{"X-Internal": "1"}},
+			BackendGroup: "g-internal",
+		},
+		// fallback
+		config.RoutingRule{Match: config.MatchCondition{PathPrefix: "/"}, BackendGroup: "g-default"},
+	)
+	r, err := Build(rules, nil)
+	require.NoError(t, err)
+
+	type kase struct {
+		name    string
+		path    string
+		host    string
+		headers map[string]string
+		query   string
+		want    string
+	}
+
+	cases := []kase{
+		{"exact root wins over default", "/", "any.example.com", nil, "", "g-root-exact"},
+		{"host+regex picks api-users", "/v1/users/42", "api.example.com", nil, "", "g-api-users"},
+		{"api-users regex miss falls to longer prefix", "/v1/users/abc", "api.example.com", nil, "", "g-default"},
+		{"host+query matches shop-v2", "/items", "shop.example.com", nil, "v=2", "g-shop-v2"},
+		{"shop without query falls to default", "/items", "shop.example.com", nil, "", "g-default"},
+		{"static prefix with trailing slash", "/static/logo.png", "any.example.com", nil, "", "g-static"},
+		{"static prefix matches exactly /static/", "/static/", "any.example.com", nil, "", "g-static"},
+		{"longer prefix /api/v1 wins over /", "/api/v1/products", "any.example.com", nil, "", "g-api-v1"},
+		{"header-only rule matches when header present", "/anything", "any.example.com", map[string]string{"X-Internal": "1"}, "", "g-internal"},
+		{"header miss falls to default", "/anything", "any.example.com", map[string]string{"X-Internal": "0"}, "", "g-default"},
+		{"unknown path lands on default", "/random/path", "any.example.com", nil, "", "g-default"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			target := "http://placeholder" + tc.path
+			if tc.query != "" {
+				target += "?" + tc.query
+			}
+			req := httptest.NewRequest(http.MethodGet, target, nil)
+			req.Host = tc.host
+			for k, v := range tc.headers {
+				req.Header.Set(k, v)
+			}
+			got, ok := r.Route(req)
+			require.True(t, ok, "ожидаем попадание для %s", tc.name)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
 // guard against accidental use of strings.HasPrefix without segment boundary
 // (the matcher tests cover this too, but we want it visible at the router level).
 func TestRoute_PrefixBoundaryAtRouterLevel(t *testing.T) {

@@ -513,3 +513,165 @@ func TestServeHTTP_UnreachableBackendReturns502(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadGateway, w.Code)
 }
+
+// --- Stage G coverage: end-to-end через ServeHTTP ---------------------------
+
+// newProxyWithHeaders собирает Proxy с включёнными StandardHeaders и
+// произвольными HeaderRules — нужно для проверки сквозного pipeline.
+func newProxyWithHeaders(
+	t *testing.T,
+	rt *router.Router,
+	groups map[string]Balancer,
+	headerRules config.HeaderRules,
+	std config.StandardHeadersConfig,
+) (*Proxy, *bytes.Buffer) {
+	t.Helper()
+	log, buf := newTestLogger()
+	tr := BuildTransport(TransportSettings{})
+	p := New(rt, groups, tr, pool.NewBufferPool(4096), headerRules, std, config.WebSocketConfig{Enabled: true}, log)
+	return p, buf
+}
+
+// Гарантия: hop-by-hop заголовки (RFC 7230 §6.1), включая custom-в-Connection,
+// не должны протечь ни в одну сторону. ReverseProxy зачищает их сам, но тест
+// фиксирует поведение от регрессий — если кто-то заменит реализацию Director'а
+// и забудет про hop-by-hop, билд упадёт здесь.
+func TestServeHTTP_StripsHopByHopHeaders(t *testing.T) {
+	t.Parallel()
+
+	var seenAtBackend http.Header
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenAtBackend = r.Header.Clone()
+		w.Header().Set("Connection", "close")     // hop-by-hop на ответе
+		w.Header().Set("Keep-Alive", "timeout=5") // hop-by-hop на ответе
+		w.Header().Set("X-Backend-Custom", "should-stay")
+		_, _ = io.WriteString(w, "ok")
+	}))
+	t.Cleanup(upstream.Close)
+
+	addr := strings.TrimPrefix(upstream.URL, "http://")
+	backend := model.NewBackend(addr, 1, 0)
+
+	bal := mocks.NewBalancer(t)
+	bal.EXPECT().Pick().Return(backend, nil)
+	bal.EXPECT().Release(backend).Return()
+
+	p, _ := newProxy(t, fallbackRouter(t, "g1"), map[string]Balancer{"g1": bal})
+	frontend := httptest.NewServer(p)
+	t.Cleanup(frontend.Close)
+
+	req, err := http.NewRequest(http.MethodGet, frontend.URL+"/x", nil)
+	require.NoError(t, err)
+	req.Header.Set("Connection", "X-Custom, Upgrade")
+	req.Header.Set("X-Custom", "should-be-stripped")
+	req.Header.Set("Keep-Alive", "timeout=5")
+	req.Header.Set("Proxy-Authorization", "Basic deadbeef")
+	req.Header.Set("X-Keep", "yes")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.Equal(t, "ok", string(body))
+
+	// Все hop-by-hop, включая custom-в-Connection, на backend не пришли.
+	for _, h := range []string{"Connection", "Keep-Alive", "Proxy-Authorization", "X-Custom", "Upgrade"} {
+		assert.Empty(t, seenAtBackend.Values(h), "header %q должен быть зачищен на backend", h)
+	}
+	assert.Equal(t, "yes", seenAtBackend.Get("X-Keep"), "обычные заголовки должны проходить")
+
+	// На клиента hop-by-hop из ответа backend'а тоже не доходят.
+	assert.Empty(t, resp.Header.Values("Connection"))
+	assert.Empty(t, resp.Header.Values("Keep-Alive"))
+	assert.Equal(t, "should-stay", resp.Header.Get("X-Backend-Custom"))
+}
+
+// Chained-proxy: клиент уже выступает «первым прокси» и шлёт XFF/XFH/XFP.
+// Наш прокси должен дописать свой client_ip к XFF (через запятую), не теряя
+// предыдущие хопы, и проставить X-Real-IP в client_ip (нашего downstream).
+func TestServeHTTP_StandardHeaders_ChainedXForwardedFor(t *testing.T) {
+	t.Parallel()
+
+	var seenAtBackend http.Header
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenAtBackend = r.Header.Clone()
+		_, _ = io.WriteString(w, "ok")
+	}))
+	t.Cleanup(upstream.Close)
+
+	addr := strings.TrimPrefix(upstream.URL, "http://")
+	backend := model.NewBackend(addr, 1, 0)
+
+	bal := mocks.NewBalancer(t)
+	bal.EXPECT().Pick().Return(backend, nil)
+	bal.EXPECT().Release(backend).Return()
+
+	p, _ := newProxyWithHeaders(t,
+		fallbackRouter(t, "g1"),
+		map[string]Balancer{"g1": bal},
+		config.HeaderRules{},
+		config.StandardHeadersConfig{Enabled: true}, // EffectiveSet раскроет всё
+	)
+	frontend := httptest.NewServer(p)
+	t.Cleanup(frontend.Close)
+
+	req, err := http.NewRequest(http.MethodGet, frontend.URL+"/x", nil)
+	require.NoError(t, err)
+	req.Header.Set("X-Forwarded-For", "203.0.113.7, 198.51.100.42")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	xff := seenAtBackend.Get("X-Forwarded-For")
+	// Префикс — оригинальная цепочка, в конце — IP нашего downstream (127.0.0.1).
+	assert.True(t, strings.HasPrefix(xff, "203.0.113.7, 198.51.100.42, "),
+		"XFF должен сохранять цепочку и дописывать новый хоп: %q", xff)
+	parts := strings.Split(xff, ", ")
+	assert.Len(t, parts, 3, "ожидаем три хопа в XFF")
+
+	// X-Real-IP — IP downstream (нашего клиента), а не первый хоп цепочки.
+	assert.Equal(t, parts[2], seenAtBackend.Get("X-Real-Ip"),
+		"X-Real-IP должен совпадать с последним добавленным в XFF (наш downstream)")
+
+	assert.Equal(t, "http", seenAtBackend.Get("X-Forwarded-Proto"), "TLS отсутствует → http")
+	assert.NotEmpty(t, seenAtBackend.Get("X-Forwarded-Host"))
+	assert.NotEmpty(t, seenAtBackend.Get("X-Request-Id"), "request_id должен генериться, если не задан клиентом")
+}
+
+// Через TLS-фронтенд X-Forwarded-Proto должен стать "https".
+func TestServeHTTP_StandardHeaders_TLSSchemeIsHTTPS(t *testing.T) {
+	t.Parallel()
+
+	var seenAtBackend http.Header
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenAtBackend = r.Header.Clone()
+		_, _ = io.WriteString(w, "ok")
+	}))
+	t.Cleanup(upstream.Close)
+
+	addr := strings.TrimPrefix(upstream.URL, "http://")
+	backend := model.NewBackend(addr, 1, 0)
+
+	bal := mocks.NewBalancer(t)
+	bal.EXPECT().Pick().Return(backend, nil)
+	bal.EXPECT().Release(backend).Return()
+
+	p, _ := newProxyWithHeaders(t,
+		fallbackRouter(t, "g1"),
+		map[string]Balancer{"g1": bal},
+		config.HeaderRules{},
+		config.StandardHeadersConfig{Enabled: true, ForwardedProto: true},
+	)
+
+	// TLS-фронтенд через httptest: клиент придёт по https, r.TLS != nil.
+	tlsFrontend := httptest.NewTLSServer(p)
+	t.Cleanup(tlsFrontend.Close)
+
+	resp, err := tlsFrontend.Client().Get(tlsFrontend.URL + "/x")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, "https", seenAtBackend.Get("X-Forwarded-Proto"))
+}
