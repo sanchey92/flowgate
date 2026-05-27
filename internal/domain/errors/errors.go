@@ -4,6 +4,7 @@ import "errors"
 
 var (
 	ErrNoBackends             = errors.New("no backends available")
+	ErrAllBackendsUnhealthy   = errors.New("all backends unhealthy")
 	ErrProxyStarted           = errors.New("proxy already started")
 	ErrProxyStopped           = errors.New("proxy already stopped")
 	ErrInvalidProxyProtocol   = errors.New("invalid proxy protocol header")

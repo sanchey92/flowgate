@@ -29,6 +29,9 @@ func mapErrorToStatus(err error) int {
 	case errors.Is(err, context.Canceled):
 		return http.StatusBadGateway
 
+	case errors.Is(err, domainErr.ErrAllBackendsUnhealthy):
+		return http.StatusServiceUnavailable
+
 	default:
 		if netErr, ok := errors.AsType[net.Error](err); ok && netErr.Timeout() {
 			return http.StatusGatewayTimeout
