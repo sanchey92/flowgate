@@ -45,13 +45,22 @@ func (rr *RoundRobin) Pick() (*model.Backend, error) {
 
 	total := 0
 	bestIdx := -1
+	healthyCount := 0
 	for i, b := range backends {
+		if b.Status() != model.StatusHealthy {
+			continue
+		}
+		healthyCount++
 		rr.cw[i] += b.Weight
 		total += b.Weight
 		if bestIdx == -1 || rr.cw[i] > rr.cw[bestIdx] {
 			bestIdx = i
 		}
 	}
+	if healthyCount == 0 {
+		return nil, domainErr.ErrAllBackendsUnhealthy
+	}
+
 	rr.cw[bestIdx] -= total
 	return backends[bestIdx], nil
 }

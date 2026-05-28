@@ -22,17 +22,26 @@ func (lc *LeastConn) Pick() (*model.Backend, error) {
 	if len(backends) == 0 {
 		return nil, domainErr.ErrNoBackends
 	}
-
-	best := backends[0]
-	bestConns := best.ActiveConns.Load()
-	for _, b := range backends[1:] {
+	var (
+		best      *model.Backend
+		bestConns int64
+	)
+	for _, b := range backends {
+		if b.Status() != model.StatusHealthy {
+			continue
+		}
 		c := b.ActiveConns.Load()
 		switch {
+		case best == nil:
+			best, bestConns = b, c
 		case c < bestConns:
 			best, bestConns = b, c
 		case c == bestConns && b.Weight > best.Weight:
 			best = b
 		}
+	}
+	if best == nil {
+		return nil, domainErr.ErrAllBackendsUnhealthy
 	}
 
 	best.ActiveConns.Add(1)
