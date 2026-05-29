@@ -122,8 +122,9 @@ func startProxy(t *testing.T, ctx context.Context, r config.Route, log *slog.Log
 
 	defaults := testDefaults()
 	settings := r.Effective(defaults)
-	p, err := proxy.New(r, defaults, settings, log)
+	built, err := proxy.New(r, defaults, settings, log)
 	require.NoError(t, err)
+	p := built.Runner
 
 	require.NoError(t, p.Start(ctx))
 	t.Cleanup(func() {

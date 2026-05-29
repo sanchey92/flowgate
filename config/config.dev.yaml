@@ -35,6 +35,15 @@ routes:
       idle_timeout: 60s
       keepalive: 30s
       proxyproto_header_timeout: 3s
+    health_check:
+      active:
+        enabled: true
+        interval: 10s              # период между пробами (должен быть > timeout)
+        timeout: 3s                # дедлайн одной пробы
+        unhealthy_threshold: 3     # подряд провалов → backend помечается unhealthy
+        healthy_threshold: 2       # подряд успехов → backend восстанавливается
+        # path / expected_status для tcp не используются:
+        # проба делает только TCP-dial до addr и сразу закрывает соединение
     backends:
       - addr: "127.0.0.1:9001"
         weight: 5
@@ -45,6 +54,10 @@ routes:
     protocol: udp
     listen: ":18081"
     balancer: least_conn
+    # health_check для udp намеренно не включён: активная проба сейчас умеет
+    # только tcp-dial (http-пробер выбирается лишь для protocol: http), а tcp-dial
+    # до udp-порта не валидирует udp-listener. Включать смысла нет до появления
+    # udp-пробы (echo/ping).
     timeouts:
       udp:
         session_idle: 30s
@@ -60,6 +73,16 @@ routes:
     protocol: http
     listen: ":18082"
     balancer: round_robin
+    health_check:
+      active:
+        enabled: true
+        interval: 10s              # период между пробами (должен быть > timeout)
+        timeout: 3s                # дедлайн одной пробы
+        unhealthy_threshold: 3     # подряд провалов → backend помечается unhealthy
+        healthy_threshold: 2       # подряд успехов → backend восстанавливается
+        path: /healthz             # GET http://<backend.addr>/healthz
+        expected_status: 200       # любой другой код = провал пробы
+    # проба применяется ко всем backend'ам из всех backend_groups ниже
     http:
       timeouts:
         response_header_timeout: 30s

@@ -25,6 +25,26 @@ type Scheduler struct {
 	wg      sync.WaitGroup
 }
 
+// New is the one-shot constructor for a route's active health checks: it
+// normalizes cfg, picks the protocol-appropriate Checker, and wires up the
+// Scheduler. Normalizing here — BEFORE building the Checker — is what guarantees
+// the HTTP probe sees a defaulted Path/ExpectedStatus even when cfg was built
+// programmatically (i.e. without the config layer's env-defaults).
+func New(
+	protocol string,
+	cfg *Config,
+	backends []*model.Backend,
+	onChange model.StatusListener,
+	log *slog.Logger,
+) (*Scheduler, error) {
+	cfg = cfg.withDefaults()
+	checker := NewChecker(protocol, cfg)
+	return NewScheduler(checker, backends, cfg, onChange, log)
+}
+
+// NewScheduler builds a Scheduler from a ready Checker. It re-applies defaults
+// and validates so it stays self-sufficient for direct callers/tests (the
+// withDefaults call is idempotent, so going through New is free of surprises).
 func NewScheduler(
 	checker Checker,
 	backends []*model.Backend,

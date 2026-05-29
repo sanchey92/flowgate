@@ -30,6 +30,11 @@ var (
 	_ Runner = (*udp.Proxy)(nil)
 )
 
+type Built struct {
+	Runner   Runner
+	Backends []*model.Backend
+}
+
 type Kind string
 
 const (
@@ -38,7 +43,7 @@ const (
 	KindHTTP Kind = "http"
 )
 
-func New(r config.Route, defaults config.Defaults, s config.Settings, log *slog.Logger) (Runner, error) {
+func New(r config.Route, defaults config.Defaults, s config.Settings, log *slog.Logger) (Built, error) {
 	switch Kind(strings.ToLower(strings.TrimSpace(r.Protocol))) {
 	case KindTCP:
 		return newTCP(r, s, log)
@@ -47,24 +52,24 @@ func New(r config.Route, defaults config.Defaults, s config.Settings, log *slog.
 	case KindHTTP:
 		return newHTTP(r, defaults, s, log)
 	default:
-		return nil, fmt.Errorf("proxy: route %q: unknown protocol %q", r.Name, r.Protocol)
+		return Built{}, fmt.Errorf("proxy: route %q: unknown protocol %q", r.Name, r.Protocol)
 	}
 }
 
-func newTCP(r config.Route, s config.Settings, log *slog.Logger) (Runner, error) {
-	bal, err := buildBalancer(r.Name, r.Balancer, r.Backends)
+func newTCP(r config.Route, s config.Settings, log *slog.Logger) (Built, error) {
+	bal, backends, err := buildBalancer(r.Name, r.Balancer, r.Backends)
 	if err != nil {
-		return nil, err
+		return Built{}, err
 	}
 
 	bo, err := backoff.NewExponential(s.Backoff.Base, s.Backoff.Max)
 	if err != nil {
-		return nil, fmt.Errorf("proxy: route %q: backoff: %w", r.Name, err)
+		return Built{}, fmt.Errorf("proxy: route %q: backoff: %w", r.Name, err)
 	}
 
 	ppMode, err := proxyproto.ParseMode(r.ProxyProtocol)
 	if err != nil {
-		return nil, fmt.Errorf("proxy: route %q: proxyproto mode: %w", r.Name, err)
+		return Built{}, fmt.Errorf("proxy: route %q: proxyproto mode: %w", r.Name, err)
 	}
 
 	bp := pool.NewBufferPool(s.BufSize)
@@ -84,40 +89,46 @@ func newTCP(r config.Route, s config.Settings, log *slog.Logger) (Runner, error)
 		nil,
 	)
 
-	return tcp.New(r.Name, r.Listen, handler, lim, &bo, log), nil
+	return Built{
+		Runner:   tcp.New(r.Name, r.Listen, handler, lim, &bo, log),
+		Backends: backends,
+	}, nil
 }
 
-func newUDP(r config.Route, s config.Settings, log *slog.Logger) (Runner, error) {
-	bal, err := buildBalancer(r.Name, r.Balancer, r.Backends)
+func newUDP(r config.Route, s config.Settings, log *slog.Logger) (Built, error) {
+	bal, backends, err := buildBalancer(r.Name, r.Balancer, r.Backends)
 	if err != nil {
-		return nil, err
+		return Built{}, err
 	}
 
-	return udp.New(
-		r.Name,
-		r.Listen,
-		bal,
-		udp.Timeouts{
-			SessionIdle: s.UDP.SessionIdle,
-			BackendRead: s.UDP.BackendRead,
-			Dial:        s.UDP.Dial,
-		},
-		log,
-		nil,
-	), nil
+	return Built{
+		Runner: udp.New(
+			r.Name,
+			r.Listen,
+			bal,
+			udp.Timeouts{
+				SessionIdle: s.UDP.SessionIdle,
+				BackendRead: s.UDP.BackendRead,
+				Dial:        s.UDP.Dial,
+			},
+			log,
+			nil,
+		),
+		Backends: backends,
+	}, nil
 }
 
-func buildBalancer(routeName, kind string, backends []config.Backend) (balancer.Balancer, error) {
+func buildBalancer(routeName, kind string, backends []config.Backend) (balancer.Balancer, []*model.Backend, error) {
 	if len(backends) == 0 {
-		return nil, fmt.Errorf("proxy: route %q: no backends", routeName)
+		return nil, nil, fmt.Errorf("proxy: route %q: no backends", routeName)
 	}
 	models := buildBackends(backends)
 	reg := registry.NewInMemory(models)
 	bal, err := balancer.New(kind, reg)
 	if err != nil {
-		return nil, fmt.Errorf("proxy: route %q: balancer: %w", routeName, err)
+		return nil, nil, fmt.Errorf("proxy: route %q: balancer: %w", routeName, err)
 	}
-	return bal, nil
+	return bal, models, nil
 }
 
 func buildBackends(in []config.Backend) []*model.Backend {
