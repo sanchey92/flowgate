@@ -53,14 +53,15 @@ type Backoff struct {
 }
 
 type Route struct {
-	Name          string      `yaml:"name"`
-	Protocol      string      `yaml:"protocol"`
-	Listen        string      `yaml:"listen"`
-	Balancer      string      `yaml:"balancer"`
-	ProxyProtocol string      `yaml:"proxy_protocol"`
-	Timeouts      Timeouts    `yaml:"timeouts"`
-	Backends      []Backend   `yaml:"backends"`
-	HTTP          *HTTPConfig `yaml:"http,omitempty"`
+	Name          string             `yaml:"name"`
+	Protocol      string             `yaml:"protocol"`
+	Listen        string             `yaml:"listen"`
+	Balancer      string             `yaml:"balancer"`
+	ProxyProtocol string             `yaml:"proxy_protocol"`
+	Timeouts      Timeouts           `yaml:"timeouts"`
+	HealthCheck   *HealthCheckConfig `yaml:"health_check"`
+	Backends      []Backend          `yaml:"backends"`
+	HTTP          *HTTPConfig        `yaml:"http,omitempty"`
 }
 
 type Timeouts struct {
