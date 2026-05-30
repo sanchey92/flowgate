@@ -74,12 +74,19 @@ func NewSelectingTransport(inner http.RoundTripper) *SelectingTransport {
 }
 
 func (t *SelectingTransport) RoundTrip(r *http.Request) (*http.Response, error) {
-	if s := reqctx.SlotFrom(r.Context()); s != nil && s.PickErr != nil {
-		return nil, fmt.Errorf("http proxy pick: %w", s.PickErr)
+	slot := reqctx.SlotFrom(r.Context())
+
+	if slot != nil && slot.PickErr != nil {
+		return nil, fmt.Errorf("http proxy pick: %w", slot.PickErr)
 	}
 	resp, err := t.inner.RoundTrip(r)
 	if err != nil {
 		return nil, fmt.Errorf("http proxy: round trip: %w", err)
 	}
+
+	if slot != nil && slot.Backend != nil {
+		slot.Backend.Observe(isUpstreamFailure(resp, err))
+	}
+
 	return resp, nil
 }

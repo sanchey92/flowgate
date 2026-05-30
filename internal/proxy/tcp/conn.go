@@ -97,9 +97,11 @@ func (h *Handler) Handle(ctx context.Context, client net.Conn) {
 
 	backendConn, err := h.dialBackend(ctx, backend.Addr)
 	if err != nil {
+		backend.Observe(true)
 		log.Warn("backend dial failed", slog.Any("error", err))
 		return
 	}
+	backend.Observe(false)
 	defer func() { closeWithLog(backendConn, log, "backend") }()
 
 	h.configureKeepAlive(client, backendConn, log)

@@ -27,7 +27,7 @@ func (lc *LeastConn) Pick() (*model.Backend, error) {
 		bestConns int64
 	)
 	for _, b := range backends {
-		if b.Status() != model.StatusHealthy {
+		if !b.Available() {
 			continue
 		}
 		c := b.ActiveConns.Load()

@@ -26,12 +26,18 @@ func (s BackendStatus) String() string {
 	}
 }
 
+type Breaker interface {
+	Allow() bool
+	Observe(failed bool)
+}
+
 type Backend struct {
 	ID          string
 	Addr        string
 	Weight      int
 	ActiveConns atomic.Int64
 	status      atomic.Int32
+	breaker     Breaker
 }
 
 func NewBackend(addr string, weight, idx int) *Backend {
@@ -60,4 +66,25 @@ func (b *Backend) Drain() bool {
 		}
 	}
 	return false
+}
+
+func (b *Backend) AttachBreaker(br Breaker) {
+	b.breaker = br
+}
+
+func (b *Backend) Allow() bool {
+	if b.breaker == nil {
+		return true
+	}
+	return b.breaker.Allow()
+}
+
+func (b *Backend) Observe(failed bool) {
+	if b.breaker != nil {
+		b.breaker.Observe(failed)
+	}
+}
+
+func (b *Backend) Available() bool {
+	return b.Status() == StatusHealthy && b.Allow()
 }

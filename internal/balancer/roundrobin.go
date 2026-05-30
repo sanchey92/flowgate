@@ -47,7 +47,7 @@ func (rr *RoundRobin) Pick() (*model.Backend, error) {
 	bestIdx := -1
 	healthyCount := 0
 	for i, b := range backends {
-		if b.Status() != model.StatusHealthy {
+		if !b.Available() {
 			continue
 		}
 		healthyCount++

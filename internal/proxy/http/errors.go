@@ -39,3 +39,20 @@ func mapErrorToStatus(err error) int {
 		return http.StatusBadGateway
 	}
 }
+
+func isUpstreamFailure(resp *http.Response, err error) bool {
+	if err != nil {
+		return true
+	}
+	if resp == nil {
+		return true
+	}
+	switch resp.StatusCode {
+	case http.StatusBadGateway,
+		http.StatusServiceUnavailable,
+		http.StatusGatewayTimeout:
+		return true
+	default:
+		return false
+	}
+}
