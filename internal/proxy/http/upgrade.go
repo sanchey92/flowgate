@@ -14,7 +14,7 @@ func isWebSocketUpgrade(r *http.Request) bool {
 		return false
 	}
 
-	return strings.EqualFold(r.Header.Get("Upgrade"), "websocket")
+	return strings.EqualFold(r.Header.Get("Upgrade"), upgradeWebSocket)
 }
 
 func isHeaderContainsToken(values []string, target string) bool {

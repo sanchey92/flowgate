@@ -1,6 +1,7 @@
 package proxyhttp
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net"
@@ -18,7 +19,10 @@ import (
 	"github.com/sanchey92/flowgate/internal/proxy/requestid"
 )
 
-const requestIDHeader = "X-Request-ID"
+const (
+	requestIDHeader  = "X-Request-ID"
+	upgradeWebSocket = "websocket"
+)
 
 type Balancer interface {
 	Pick() (*model.Backend, error)
@@ -26,14 +30,15 @@ type Balancer interface {
 }
 
 type Proxy struct {
-	router    *router.Router
-	groups    map[string]Balancer
-	transport *http.Transport
-	rp        *httputil.ReverseProxy
-	headers   *middleware.HeaderMiddleware
-	standard  *middleware.StandardHeaders
-	ws        config.WebSocketConfig
-	log       *slog.Logger
+	router         *router.Router
+	groups         map[string]Balancer
+	transport      *http.Transport
+	rp             *httputil.ReverseProxy
+	headers        *middleware.HeaderMiddleware
+	standard       *middleware.StandardHeaders
+	ws             config.WebSocketConfig
+	requestTimeout time.Duration
+	log            *slog.Logger
 }
 
 func New(
@@ -44,16 +49,18 @@ func New(
 	headerRules config.HeaderRules,
 	stdHeaders config.StandardHeadersConfig,
 	ws config.WebSocketConfig,
+	requestTimeout time.Duration,
 	log *slog.Logger,
 ) *Proxy {
 	p := &Proxy{
-		router:    r,
-		groups:    groups,
-		transport: transport,
-		headers:   middleware.NewHeaderMiddleware(headerRules, log),
-		standard:  middleware.NewStandardHeaders(stdHeaders),
-		ws:        ws,
-		log:       log,
+		router:         r,
+		groups:         groups,
+		transport:      transport,
+		headers:        middleware.NewHeaderMiddleware(headerRules, log),
+		standard:       middleware.NewStandardHeaders(stdHeaders),
+		requestTimeout: requestTimeout,
+		ws:             ws,
+		log:            log,
 	}
 
 	p.rp = &httputil.ReverseProxy{
@@ -156,10 +163,17 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if isWebSocketUpgrade(r) {
-		slot.Upgrade = "websocket"
+		slot.Upgrade = upgradeWebSocket
 	}
 
 	ctx := reqctx.WithSlot(r.Context(), slot)
+
+	if p.requestTimeout > 0 && slot.Upgrade == upgradeWebSocket {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, p.requestTimeout)
+		defer cancel()
+	}
+
 	r = r.WithContext(ctx)
 
 	rec := &recorder{ResponseWriter: w}
@@ -173,7 +187,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		p.accessLog(r, slot, rec, time.Since(startedAt))
 	}()
 
-	if slot.Upgrade == "websocket" && !p.ws.Enabled {
+	if slot.Upgrade == upgradeWebSocket && !p.ws.Enabled {
 		rec.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		rec.WriteHeader(http.StatusNotImplemented)
 		_, _ = rec.Write([]byte("websocket upgrade is disabled\n"))

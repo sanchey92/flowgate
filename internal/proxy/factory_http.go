@@ -47,6 +47,7 @@ func newHTTP(r config.Route, defaults config.Defaults, s config.Settings, log *s
 		r.HTTP.HeaderRules,
 		r.HTTP.StandardHeaders,
 		r.HTTP.WebSocket,
+		httpSet.RequestTimeout,
 		log,
 	)
 

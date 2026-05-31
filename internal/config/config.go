@@ -36,6 +36,7 @@ type Defaults struct {
 }
 
 type HTTPDefaults struct {
+	RequestTimeout        time.Duration `yaml:"request_timeout" env-default:"60s"`
 	ResponseHeaderTimeout time.Duration `yaml:"response_header_timeout" env-default:"30s"`
 	WriteTimeout          time.Duration `yaml:"write_timeout" env-default:"0s"`
 	ReadHeaderTimeout     time.Duration `yaml:"read_header_timeout" env-default:"5s"` // beyond task

@@ -57,7 +57,7 @@ func newProxyWithWS(t *testing.T, r *router.Router, groups map[string]Balancer, 
 	t.Helper()
 	log, buf := newTestLogger()
 	tr := BuildTransport(TransportSettings{})
-	p := New(r, groups, tr, pool.NewBufferPool(4096), config.HeaderRules{}, config.StandardHeadersConfig{}, ws, log)
+	p := New(r, groups, tr, pool.NewBufferPool(4096), config.HeaderRules{}, config.StandardHeadersConfig{}, ws, 0, log)
 	return p, buf
 }
 
@@ -81,7 +81,7 @@ func TestNew_WiresReverseProxy(t *testing.T) {
 	tr := BuildTransport(TransportSettings{})
 	log, _ := newTestLogger()
 
-	p := New(r, map[string]Balancer{}, tr, pool.NewBufferPool(1024), config.HeaderRules{}, config.StandardHeadersConfig{}, config.WebSocketConfig{Enabled: true}, log)
+	p := New(r, map[string]Balancer{}, tr, pool.NewBufferPool(1024), config.HeaderRules{}, config.StandardHeadersConfig{}, config.WebSocketConfig{Enabled: true}, 0, log)
 
 	require.NotNil(t, p)
 	assert.Same(t, tr, p.transport)
@@ -528,7 +528,7 @@ func newProxyWithHeaders(
 	t.Helper()
 	log, buf := newTestLogger()
 	tr := BuildTransport(TransportSettings{})
-	p := New(rt, groups, tr, pool.NewBufferPool(4096), headerRules, std, config.WebSocketConfig{Enabled: true}, log)
+	p := New(rt, groups, tr, pool.NewBufferPool(4096), headerRules, std, config.WebSocketConfig{Enabled: true}, 0, log)
 	return p, buf
 }
 

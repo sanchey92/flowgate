@@ -87,12 +87,14 @@ func (s StandardHeadersConfig) EffectiveSet() StandardHeadersConfig {
 }
 
 type HTTPTimeouts struct {
+	RequestTimeout        time.Duration `yaml:"request_timeout"`
 	ResponseHeaderTimeout time.Duration `yaml:"response_header_timeout"`
 	WriteTimeout          time.Duration `yaml:"write_timeout"`
 	ReadHeaderTimeout     time.Duration `yaml:"read_header_timeout"`
 }
 
 type HTTPSettings struct {
+	RequestTimeout        time.Duration
 	ResponseHeaderTimeout time.Duration
 	WriteTimeout          time.Duration
 	ReadHeaderTimeout     time.Duration
@@ -100,6 +102,7 @@ type HTTPSettings struct {
 
 func (h HTTPConfig) EffectiveTimeouts(d HTTPDefaults) HTTPSettings {
 	return HTTPSettings{
+		RequestTimeout:        firstNonZeroDur(h.Timeouts.RequestTimeout, d.RequestTimeout),
 		ResponseHeaderTimeout: firstNonZeroDur(h.Timeouts.ResponseHeaderTimeout, d.ResponseHeaderTimeout),
 		WriteTimeout:          firstNonZeroDur(h.Timeouts.WriteTimeout, d.WriteTimeout),
 		ReadHeaderTimeout:     firstNonZeroDur(h.Timeouts.ReadHeaderTimeout, d.ReadHeaderTimeout),
@@ -107,5 +110,5 @@ func (h HTTPConfig) EffectiveTimeouts(d HTTPDefaults) HTTPSettings {
 }
 
 type WebSocketConfig struct {
-	Enabled bool `yaml:"enabled" env-default:"true"` // ⚠ см. Приложение Г
+	Enabled bool `yaml:"enabled" env-default:"true"`
 }
