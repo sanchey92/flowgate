@@ -45,6 +45,22 @@ func NewBreaker(cfg *Config) *Breaker {
 	}
 }
 
+// Ready reports, without side effects, whether the balancer may consider this
+// backend: closed always; open once recovery has elapsed; half-open while a
+// probe slot is free. The probe is consumed by Allow on the selected backend.
+func (b *Breaker) Ready() bool {
+	switch State(b.state.Load()) {
+	case StateClosed:
+		return true
+	case StateOpen:
+		return nowNanos()-b.openedAt.Load() >= int64(b.recovery)
+	case StateHalfOpen:
+		return nowNanos()-b.lastProbe.Load() >= int64(b.recovery)
+	default:
+		return true
+	}
+}
+
 func (b *Breaker) Allow() bool {
 	switch State(b.state.Load()) {
 	case StateClosed:

@@ -22,30 +22,39 @@ func (lc *LeastConn) Pick() (*model.Backend, error) {
 	if len(backends) == 0 {
 		return nil, domainErr.ErrNoBackends
 	}
-	var (
-		best      *model.Backend
-		bestConns int64
-	)
-	for _, b := range backends {
-		if !b.Available() {
+	for {
+		var (
+			best      *model.Backend
+			bestConns int64
+		)
+		for _, b := range backends {
+			if !b.Available() {
+				continue
+			}
+			c := b.ActiveConns.Load()
+			switch {
+			case best == nil:
+				best, bestConns = b, c
+			case c < bestConns:
+				best, bestConns = b, c
+			case c == bestConns && b.Weight > best.Weight:
+				best = b
+			}
+		}
+		if best == nil {
+			return nil, domainErr.ErrAllBackendsUnhealthy
+		}
+
+		// Consume the breaker's probe slot. If a concurrent Pick took the
+		// half-open slot first, best is no longer Available — rescan and choose
+		// another rather than burning the probe on a request we won't send.
+		if !best.Acquire() {
 			continue
 		}
-		c := b.ActiveConns.Load()
-		switch {
-		case best == nil:
-			best, bestConns = b, c
-		case c < bestConns:
-			best, bestConns = b, c
-		case c == bestConns && b.Weight > best.Weight:
-			best = b
-		}
-	}
-	if best == nil {
-		return nil, domainErr.ErrAllBackendsUnhealthy
-	}
 
-	best.ActiveConns.Add(1)
-	return best, nil
+		best.ActiveConns.Add(1)
+		return best, nil
+	}
 }
 
 func (lc *LeastConn) Release(b *model.Backend) {

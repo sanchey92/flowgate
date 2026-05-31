@@ -185,6 +185,43 @@ func TestBreaker_Concurrent(t *testing.T) {
 	assert.Contains(t, []State{StateClosed, StateOpen, StateHalfOpen}, b.CurrentState())
 }
 
+func TestBreaker_Ready_ClosedStaysPure(t *testing.T) {
+	b := newTestBreaker(3, time.Minute)
+
+	assert.True(t, b.Ready(), "закрытый брейкер всегда готов")
+	assert.Equal(t, StateClosed, b.CurrentState(), "Ready не меняет состояние")
+}
+
+func TestBreaker_Ready_OpenGatesOnRecovery(t *testing.T) {
+	b := newTestBreaker(1, time.Minute)
+	b.Observe(true)
+	require.Equal(t, StateOpen, b.CurrentState())
+
+	assert.False(t, b.Ready(), "до истечения recovery — не готов")
+
+	elapseRecovery(b)
+	assert.True(t, b.Ready(), "после recovery — готов принять пробник")
+	assert.Equal(t, StateOpen, b.CurrentState(),
+		"переход в half-open делает Allow, а не Ready")
+}
+
+func TestBreaker_Ready_DoesNotConsumeHalfOpenProbe(t *testing.T) {
+	b := newTestBreaker(3, time.Minute)
+	driveToHalfOpen(t, b) // half-open, первый пробник уже израсходован
+
+	assert.False(t, b.Ready(), "пробник только что занят — слота нет")
+
+	// Возвращаем слот и убеждаемся, что многократный Ready его не расходует.
+	b.lastProbe.Store(nowNanos() - int64(b.recovery) - 1)
+	assert.True(t, b.Ready())
+	assert.True(t, b.Ready(), "повторный Ready не «съедает» пробник")
+	assert.Equal(t, StateHalfOpen, b.CurrentState())
+
+	// А Allow расходует: ровно один проходит, дальше снова не готов.
+	require.True(t, b.Allow())
+	assert.False(t, b.Ready())
+}
+
 // newTestBreaker собирает брейкер с большим окном, чтобы все ошибки в тесте
 // заведомо попадали в одно временное окно.
 func newTestBreaker(threshold int, recovery time.Duration) *Breaker {

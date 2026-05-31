@@ -62,6 +62,10 @@ func (rr *RoundRobin) Pick() (*model.Backend, error) {
 	}
 
 	rr.cw[bestIdx] -= total
+	// Consume the breaker's probe slot for the winner only; the scan above used
+	// the side-effect-free Available(). Pick is serialized by rr.mu, so admission
+	// here always succeeds — the call stands for its side effect.
+	backends[bestIdx].Acquire()
 	return backends[bestIdx], nil
 }
 

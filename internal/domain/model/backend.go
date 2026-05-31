@@ -27,6 +27,7 @@ func (s BackendStatus) String() string {
 }
 
 type Breaker interface {
+	Ready() bool
 	Allow() bool
 	Observe(failed bool)
 }
@@ -72,7 +73,10 @@ func (b *Backend) AttachBreaker(br Breaker) {
 	b.breaker = br
 }
 
-func (b *Backend) Allow() bool {
+// Acquire commits a request to this backend, consuming the breaker's single
+// half-open probe slot when one is in play. Call it only on the backend the
+// balancer actually selected — never while scanning candidates.
+func (b *Backend) Acquire() bool {
 	if b.breaker == nil {
 		return true
 	}
@@ -85,6 +89,9 @@ func (b *Backend) Observe(failed bool) {
 	}
 }
 
+// Available is a side-effect-free predicate for balancer scans: the backend is
+// healthy and the breaker would admit traffic. It must not consume the probe
+// slot — that happens in Acquire on the selected winner.
 func (b *Backend) Available() bool {
-	return b.Status() == StatusHealthy && b.Allow()
+	return b.Status() == StatusHealthy && (b.breaker == nil || b.breaker.Ready())
 }

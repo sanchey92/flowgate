@@ -8,9 +8,7 @@ import (
 	"syscall"
 
 	"github.com/sanchey92/flowgate/internal/config"
-	"github.com/sanchey92/flowgate/internal/domain/model"
-	"github.com/sanchey92/flowgate/internal/health/active"
-	"github.com/sanchey92/flowgate/internal/proxy"
+	"github.com/sanchey92/flowgate/internal/route"
 	"github.com/sanchey92/flowgate/pkg/closer"
 )
 
@@ -48,32 +46,21 @@ func (a *App) Run(ctx context.Context) error {
 }
 
 func (a *App) startRoute(ctx context.Context, c *closer.Closer, r config.Route) error {
-	settings := r.Effective(a.cfg.Defaults)
-	routeLog := a.log.With(slog.String("route", r.Name))
-
-	built, err := proxy.New(r, a.cfg.Defaults, settings, routeLog)
+	rt, err := route.Assemble(r, a.cfg.Defaults, a.log)
 	if err != nil {
-		return fmt.Errorf("app: route %q: %w", r.Name, err)
+		return fmt.Errorf("app: %w", err)
 	}
 
-	sched, err := buildScheduler(r, built.Backends, routeLog)
-	if err != nil {
-		return fmt.Errorf("app: route %q: %w", r.Name, err)
-	}
-
-	if err := a.startLifecycle(ctx, c, r.Name, built.Runner.Start, built.Runner.Shutdown); err != nil {
-		return err
-	}
-
-	if sched != nil {
-		if err := a.startLifecycle(ctx, c, r.Name, sched.Start, sched.Shutdown); err != nil {
+	for _, lc := range rt.Lifecycles {
+		if err := a.startLifecycle(ctx, c, rt.Name, lc.Start, lc.Shutdown); err != nil {
 			return err
 		}
 	}
 
-	routeLog.Info("route started",
-		slog.String("protocol", r.Protocol),
-		slog.String("listen", built.Runner.Addr().String()),
+	a.log.Info("route started",
+		slog.String("route", rt.Name),
+		slog.String("protocol", rt.Protocol),
+		slog.String("listen", rt.Addr().String()),
 	)
 	return nil
 }
@@ -95,29 +82,6 @@ func (a *App) startLifecycle(
 		return fmt.Errorf("app: route %q: register shutdown: %w", routeName, err)
 	}
 	return nil
-}
-
-func buildScheduler(r config.Route, backends []*model.Backend, log *slog.Logger) (*active.Scheduler, error) {
-	if r.HealthCheck == nil || !r.HealthCheck.Active.Enabled {
-		return nil, nil
-	}
-
-	hc := r.HealthCheck.Active
-	cfg := &active.Config{
-		Enabled:            hc.Enabled,
-		Interval:           hc.Interval,
-		Timeout:            hc.Timeout,
-		UnhealthyThreshold: hc.UnhealthyThreshold,
-		HealthyThreshold:   hc.HealthyThreshold,
-		Path:               hc.Path,
-		ExpectedStatus:     hc.ExpectedStatus,
-	}
-
-	sched, err := active.New(r.Protocol, cfg, backends, nil, log)
-	if err != nil {
-		return nil, fmt.Errorf("health: %w", err)
-	}
-	return sched, nil
 }
 
 func (a *App) shutdown(parent context.Context, c *closer.Closer) {
