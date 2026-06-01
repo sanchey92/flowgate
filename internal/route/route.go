@@ -26,11 +26,10 @@ type Route struct {
 	Lifecycles []Lifecycle
 }
 
-func Assemble(r config.Route, defaults config.Defaults, log *slog.Logger) (*Route, error) {
-	settings := r.Effective(defaults)
+func Assemble(r config.Route, proxyCfg config.Proxy, log *slog.Logger) (*Route, error) {
 	log = log.With(slog.String("route", r.Name))
 
-	built, err := proxy.New(r, defaults, settings, log)
+	built, err := proxy.New(r, proxyCfg, log)
 	if err != nil {
 		return nil, fmt.Errorf("route %q: %w", r.Name, err)
 	}

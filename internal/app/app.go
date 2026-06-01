@@ -46,7 +46,7 @@ func (a *App) Run(ctx context.Context) error {
 }
 
 func (a *App) startRoute(ctx context.Context, c *closer.Closer, r config.Route) error {
-	rt, err := route.Assemble(r, a.cfg.Defaults, a.log)
+	rt, err := route.Assemble(r, a.cfg.Proxy, a.log)
 	if err != nil {
 		return fmt.Errorf("app: %w", err)
 	}

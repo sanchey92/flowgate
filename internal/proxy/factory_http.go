@@ -13,7 +13,7 @@ import (
 
 var _ Runner = (*proxyhttp.Runner)(nil)
 
-func newHTTP(r config.Route, defaults config.Defaults, s config.Settings, log *slog.Logger) (Built, error) {
+func newHTTP(r config.Route, proxyCfg config.Proxy, log *slog.Logger) (Built, error) {
 	if r.HTTP == nil {
 		return Built{}, fmt.Errorf("proxy: route %q: http config is required", r.Name)
 	}
@@ -28,16 +28,14 @@ func newHTTP(r config.Route, defaults config.Defaults, s config.Settings, log *s
 		return Built{}, fmt.Errorf("proxy: route %q: router: %w", r.Name, err)
 	}
 
-	httpSet := r.HTTP.EffectiveTimeouts(defaults.HTTP)
-
 	tr := proxyhttp.BuildTransport(proxyhttp.TransportSettings{
-		ConnectTimeout:        s.ConnectTimeout,
-		ResponseHeaderTimeout: httpSet.ResponseHeaderTimeout,
-		IdleConnTimeout:       s.IdleTimeout,
-		KeepAlivePeriod:       s.KeepAlive,
+		ConnectTimeout:        proxyCfg.ConnectTimeout,
+		ResponseHeaderTimeout: proxyCfg.HTTP.ResponseHeaderTimeout,
+		IdleConnTimeout:       proxyCfg.IdleTimeout,
+		KeepAlivePeriod:       proxyCfg.KeepAlive,
 	})
 
-	bp := pool.NewBufferPool(s.BufSize)
+	bp := pool.NewBufferPool(proxyCfg.BufSize)
 
 	p := proxyhttp.New(
 		rt,
@@ -47,15 +45,15 @@ func newHTTP(r config.Route, defaults config.Defaults, s config.Settings, log *s
 		r.HTTP.HeaderRules,
 		r.HTTP.StandardHeaders,
 		r.HTTP.WebSocket,
-		httpSet.RequestTimeout,
+		proxyCfg.HTTP.RequestTimeout,
 		log,
 	)
 
 	return Built{
 		Runner: proxyhttp.NewRunner(r.Name, r.Listen, p, proxyhttp.RunnerSettings{
-			ReadHeaderTimeout: httpSet.ReadHeaderTimeout,
-			WriteTimeout:      httpSet.WriteTimeout,
-			IdleTimeout:       s.IdleTimeout,
+			ReadHeaderTimeout: proxyCfg.HTTP.ReadHeaderTimeout,
+			WriteTimeout:      proxyCfg.HTTP.WriteTimeout,
+			IdleTimeout:       proxyCfg.IdleTimeout,
 		}, log),
 		Backends: backends,
 	}, nil

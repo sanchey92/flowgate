@@ -1,15 +1,10 @@
 package config
 
-import (
-	"time"
-)
-
 type HTTPConfig struct {
 	BackendGroups   []BackendGroup        `yaml:"backend_groups"`
 	RoutingRules    []RoutingRule         `yaml:"routing_rules"`
 	HeaderRules     HeaderRules           `yaml:"headers"`
 	StandardHeaders StandardHeadersConfig `yaml:"standard_headers"`
-	Timeouts        HTTPTimeouts          `yaml:"timeouts"`
 	WebSocket       WebSocketConfig       `yaml:"websocket"`
 }
 
@@ -83,29 +78,6 @@ func (s StandardHeadersConfig) EffectiveSet() StandardHeadersConfig {
 		ForwardedProto: true,
 		ForwardedHost:  true,
 		RequestID:      true,
-	}
-}
-
-type HTTPTimeouts struct {
-	RequestTimeout        time.Duration `yaml:"request_timeout"`
-	ResponseHeaderTimeout time.Duration `yaml:"response_header_timeout"`
-	WriteTimeout          time.Duration `yaml:"write_timeout"`
-	ReadHeaderTimeout     time.Duration `yaml:"read_header_timeout"`
-}
-
-type HTTPSettings struct {
-	RequestTimeout        time.Duration
-	ResponseHeaderTimeout time.Duration
-	WriteTimeout          time.Duration
-	ReadHeaderTimeout     time.Duration
-}
-
-func (h HTTPConfig) EffectiveTimeouts(d HTTPDefaults) HTTPSettings {
-	return HTTPSettings{
-		RequestTimeout:        firstNonZeroDur(h.Timeouts.RequestTimeout, d.RequestTimeout),
-		ResponseHeaderTimeout: firstNonZeroDur(h.Timeouts.ResponseHeaderTimeout, d.ResponseHeaderTimeout),
-		WriteTimeout:          firstNonZeroDur(h.Timeouts.WriteTimeout, d.WriteTimeout),
-		ReadHeaderTimeout:     firstNonZeroDur(h.Timeouts.ReadHeaderTimeout, d.ReadHeaderTimeout),
 	}
 }
 

@@ -14,7 +14,7 @@ func main() {
 	cfg := config.MustLoad(".env")
 
 	log := logger.Setup(cfg.Env, cfg.LogLevel, cfg.Server.InstanceID)
-	if err := cfg.Validate(log); err != nil {
+	if err := cfg.Validate(); err != nil {
 		log.Error("config validation failed", slog.Any("error", err))
 		os.Exit(1)
 	}

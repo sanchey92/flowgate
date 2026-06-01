@@ -13,8 +13,8 @@ import (
 
 func testLog() *slog.Logger { return slog.New(slog.NewTextHandler(io.Discard, nil)) }
 
-func testDefaults() config.Defaults {
-	return config.Defaults{
+func testDefaults() config.Proxy {
+	return config.Proxy{
 		ConnectTimeout:       time.Second,
 		IdleTimeout:          3 * time.Second,
 		KeepAlive:            30 * time.Second,

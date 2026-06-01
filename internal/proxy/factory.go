@@ -43,26 +43,26 @@ const (
 	KindHTTP Kind = "http"
 )
 
-func New(r config.Route, defaults config.Defaults, s config.Settings, log *slog.Logger) (Built, error) {
+func New(r config.Route, proxyCfg config.Proxy, log *slog.Logger) (Built, error) {
 	switch Kind(strings.ToLower(strings.TrimSpace(r.Protocol))) {
 	case KindTCP:
-		return newTCP(r, s, log)
+		return newTCP(r, proxyCfg, log)
 	case KindUDP:
-		return newUDP(r, s, log)
+		return newUDP(r, proxyCfg, log)
 	case KindHTTP:
-		return newHTTP(r, defaults, s, log)
+		return newHTTP(r, proxyCfg, log)
 	default:
 		return Built{}, fmt.Errorf("proxy: route %q: unknown protocol %q", r.Name, r.Protocol)
 	}
 }
 
-func newTCP(r config.Route, s config.Settings, log *slog.Logger) (Built, error) {
+func newTCP(r config.Route, proxyCfg config.Proxy, log *slog.Logger) (Built, error) {
 	bal, backends, err := buildBalancer(r.Name, r.Balancer, r.Backends)
 	if err != nil {
 		return Built{}, err
 	}
 
-	bo, err := backoff.NewExponential(s.Backoff.Base, s.Backoff.Max)
+	bo, err := backoff.NewExponential(proxyCfg.Backoff.Base, proxyCfg.Backoff.Max)
 	if err != nil {
 		return Built{}, fmt.Errorf("proxy: route %q: backoff: %w", r.Name, err)
 	}
@@ -72,19 +72,19 @@ func newTCP(r config.Route, s config.Settings, log *slog.Logger) (Built, error) 
 		return Built{}, fmt.Errorf("proxy: route %q: proxyproto mode: %w", r.Name, err)
 	}
 
-	bp := pool.NewBufferPool(s.BufSize)
-	lim := limiter.NewConcurrency(s.MaxConns)
+	bp := pool.NewBufferPool(proxyCfg.BufSize)
+	lim := limiter.NewConcurrency(proxyCfg.MaxConns)
 
 	handler := tcp.NewHandler(
 		bal,
 		bp,
 		tcp.Timeouts{
-			Connect:         s.ConnectTimeout,
-			Idle:            s.IdleTimeout,
-			KeepAlivePeriod: s.KeepAlive,
+			Connect:         proxyCfg.ConnectTimeout,
+			Idle:            proxyCfg.IdleTimeout,
+			KeepAlivePeriod: proxyCfg.KeepAlive,
 		},
 		ppMode,
-		s.ProxyProtoHdrTimeout,
+		proxyCfg.ProxyProtoHdrTimeout,
 		log,
 		nil,
 	)
@@ -95,7 +95,7 @@ func newTCP(r config.Route, s config.Settings, log *slog.Logger) (Built, error) 
 	}, nil
 }
 
-func newUDP(r config.Route, s config.Settings, log *slog.Logger) (Built, error) {
+func newUDP(r config.Route, proxyCfg config.Proxy, log *slog.Logger) (Built, error) {
 	bal, backends, err := buildBalancer(r.Name, r.Balancer, r.Backends)
 	if err != nil {
 		return Built{}, err
@@ -107,9 +107,9 @@ func newUDP(r config.Route, s config.Settings, log *slog.Logger) (Built, error) 
 			r.Listen,
 			bal,
 			udp.Timeouts{
-				SessionIdle: s.UDP.SessionIdle,
-				BackendRead: s.UDP.BackendRead,
-				Dial:        s.UDP.Dial,
+				SessionIdle: proxyCfg.UDP.SessionIdle,
+				BackendRead: proxyCfg.UDP.BackendRead,
+				Dial:        proxyCfg.UDP.Dial,
 			},
 			log,
 			nil,

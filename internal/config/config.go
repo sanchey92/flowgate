@@ -11,11 +11,11 @@ import (
 )
 
 type Config struct {
-	Env      string   `yaml:"env" env:"ENV" env-default:"dev"`
-	LogLevel string   `yaml:"log_level" env:"LOG_LEVEL" env-default:"info"`
-	Server   Server   `yaml:"server"`
-	Defaults Defaults `yaml:"defaults"`
-	Routes   []Route  `yaml:"routes"`
+	Env      string  `yaml:"env" env:"ENV" env-default:"dev"`
+	LogLevel string  `yaml:"log_level" env:"LOG_LEVEL" env-default:"info"`
+	Server   Server  `yaml:"server"`
+	Proxy    Proxy   `yaml:"proxy"`
+	Routes   []Route `yaml:"routes"`
 }
 
 type Server struct {
@@ -23,7 +23,7 @@ type Server struct {
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" env-default:"10s"`
 }
 
-type Defaults struct {
+type Proxy struct {
 	ConnectTimeout       time.Duration `yaml:"connect_timeout" env-default:"5s"`
 	IdleTimeout          time.Duration `yaml:"idle_timeout" env-default:"60s"`
 	KeepAlive            time.Duration `yaml:"keepalive" env-default:"30s"`
@@ -31,18 +31,29 @@ type Defaults struct {
 	BufSize              int           `yaml:"buf_size" env-default:"32768"`
 	ProxyProtoHdrTimeout time.Duration `yaml:"proxyproto_header_timeout" env-default:"3s"`
 	Backoff              Backoff       `yaml:"backoff"`
-	UDP                  UDPDefaults   `yaml:"udp"`
-	HTTP                 HTTPDefaults  `yaml:"http"`
+	UDP                  UDPProxy      `yaml:"udp"`
+	HTTP                 HTTPProxy     `yaml:"http"`
 }
 
-type HTTPDefaults struct {
+type HTTPProxy struct {
 	RequestTimeout        time.Duration `yaml:"request_timeout" env-default:"60s"`
 	ResponseHeaderTimeout time.Duration `yaml:"response_header_timeout" env-default:"30s"`
 	WriteTimeout          time.Duration `yaml:"write_timeout" env-default:"0s"`
-	ReadHeaderTimeout     time.Duration `yaml:"read_header_timeout" env-default:"5s"` // beyond task
+	ReadHeaderTimeout     time.Duration `yaml:"read_header_timeout" env-default:"5s"`
+	Retry                 RetryProxy    `yaml:"retry"`
 }
 
-type UDPDefaults struct {
+type RetryProxy struct {
+	Enabled        bool          `yaml:"enabled" env-default:"true"`
+	MaxRetries     int           `yaml:"max_retries" env-default:"2"`
+	RetryOn        []string      `yaml:"retry_on"`
+	BackoffBase    time.Duration `yaml:"backoff_base" env-default:"100ms"`
+	BackoffMax     time.Duration `yaml:"backoff_max" env-default:"2s"`
+	BudgetPercent  int           `yaml:"budget_percent" env-default:"20"`
+	IdempotentOnly bool          `yaml:"idempotent_only" env-default:"true"`
+}
+
+type UDPProxy struct {
 	SessionIdle time.Duration `yaml:"session_idle" env-default:"30s"`
 	BackendRead time.Duration `yaml:"backend_read" env-default:"5s"`
 	Dial        time.Duration `yaml:"dial" env-default:"2s"`
@@ -59,63 +70,14 @@ type Route struct {
 	Listen        string             `yaml:"listen"`
 	Balancer      string             `yaml:"balancer"`
 	ProxyProtocol string             `yaml:"proxy_protocol"`
-	Timeouts      Timeouts           `yaml:"timeouts"`
 	HealthCheck   *HealthCheckConfig `yaml:"health_check"`
 	Backends      []Backend          `yaml:"backends"`
 	HTTP          *HTTPConfig        `yaml:"http,omitempty"`
 }
 
-type Timeouts struct {
-	ConnectTimeout       time.Duration `yaml:"connect_timeout"`
-	IdleTimeout          time.Duration `yaml:"idle_timeout"`
-	KeepAlive            time.Duration `yaml:"keepalive"`
-	ProxyProtoHdrTimeout time.Duration `yaml:"proxyproto_header_timeout"`
-	UDP                  UDPTimeouts   `yaml:"udp"`
-}
-
-type UDPTimeouts struct {
-	SessionIdle time.Duration `yaml:"session_idle"`
-	BackendRead time.Duration `yaml:"backend_read"`
-	Dial        time.Duration `yaml:"dial"`
-}
-
 type Backend struct {
 	Addr   string `yaml:"addr"`
 	Weight int    `yaml:"weight"`
-}
-
-type Settings struct {
-	ConnectTimeout       time.Duration
-	IdleTimeout          time.Duration
-	KeepAlive            time.Duration
-	MaxConns             int
-	BufSize              int
-	ProxyProtoHdrTimeout time.Duration
-	Backoff              Backoff
-	UDP                  UDPSettings
-}
-
-type UDPSettings struct {
-	SessionIdle time.Duration
-	BackendRead time.Duration
-	Dial        time.Duration
-}
-
-func (r Route) Effective(d Defaults) Settings {
-	return Settings{
-		ConnectTimeout:       firstNonZeroDur(r.Timeouts.ConnectTimeout, d.ConnectTimeout),
-		IdleTimeout:          firstNonZeroDur(r.Timeouts.IdleTimeout, d.IdleTimeout),
-		KeepAlive:            firstNonZeroDur(r.Timeouts.KeepAlive, d.KeepAlive),
-		MaxConns:             d.MaxConns,
-		BufSize:              d.BufSize,
-		ProxyProtoHdrTimeout: firstNonZeroDur(r.Timeouts.ProxyProtoHdrTimeout, d.ProxyProtoHdrTimeout),
-		Backoff:              d.Backoff,
-		UDP: UDPSettings{
-			SessionIdle: firstNonZeroDur(r.Timeouts.UDP.SessionIdle, d.UDP.SessionIdle),
-			BackendRead: firstNonZeroDur(r.Timeouts.UDP.BackendRead, d.UDP.BackendRead),
-			Dial:        firstNonZeroDur(r.Timeouts.UDP.Dial, d.UDP.Dial),
-		},
-	}
 }
 
 func Load(envFile string) (*Config, error) {
@@ -142,13 +104,6 @@ func MustLoad(envFile string) *Config {
 		panic(err)
 	}
 	return cfg
-}
-
-func firstNonZeroDur(a, b time.Duration) time.Duration {
-	if a > 0 {
-		return a
-	}
-	return b
 }
 
 func loadEnv(envFile string) error {

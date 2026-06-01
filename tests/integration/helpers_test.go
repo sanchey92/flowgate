@@ -97,9 +97,9 @@ func (c *captureLogger) Snapshot() []map[string]any {
 	return out
 }
 
-// testDefaults returns a config.Defaults suited for fast E2E tests.
-func testDefaults() config.Defaults {
-	return config.Defaults{
+// testDefaults returns a config.Proxy suited for fast E2E tests.
+func testDefaults() config.Proxy {
+	return config.Proxy{
 		ConnectTimeout:       1 * time.Second,
 		IdleTimeout:          3 * time.Second,
 		KeepAlive:            30 * time.Second,
@@ -107,7 +107,7 @@ func testDefaults() config.Defaults {
 		BufSize:              32768,
 		ProxyProtoHdrTimeout: 1 * time.Second,
 		Backoff:              config.Backoff{Base: 20 * time.Millisecond, Max: 200 * time.Millisecond},
-		UDP: config.UDPDefaults{
+		UDP: config.UDPProxy{
 			SessionIdle: 3 * time.Second,
 			BackendRead: 1 * time.Second,
 			Dial:        500 * time.Millisecond,
@@ -121,8 +121,7 @@ func startProxy(t *testing.T, ctx context.Context, r config.Route, log *slog.Log
 	t.Helper()
 
 	defaults := testDefaults()
-	settings := r.Effective(defaults)
-	built, err := proxy.New(r, defaults, settings, log)
+	built, err := proxy.New(r, defaults, log)
 	require.NoError(t, err)
 	p := built.Runner
 

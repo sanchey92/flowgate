@@ -5,7 +5,7 @@ server:
   instance_id: fg-node-1
   shutdown_timeout: 10s
 
-defaults:
+proxy:
   connect_timeout: 5s
   idle_timeout: 60s
   keepalive: 30s
@@ -31,11 +31,6 @@ routes:
     listen: ":18080"
     balancer: round_robin
     proxy_protocol: off
-    timeouts:
-      connect_timeout: 5s
-      idle_timeout: 60s
-      keepalive: 30s
-      proxyproto_header_timeout: 3s
     health_check:
       active:
         enabled: true
@@ -59,11 +54,6 @@ routes:
     # только tcp-dial (http-пробер выбирается лишь для protocol: http), а tcp-dial
     # до udp-порта не валидирует udp-listener. Включать смысла нет до появления
     # udp-пробы (echo/ping).
-    timeouts:
-      udp:
-        session_idle: 30s
-        backend_read: 5s
-        dial: 2s
     backends:
       - addr: "127.0.0.1:9101"
         weight: 1
@@ -85,11 +75,6 @@ routes:
         expected_status: 200       # любой другой код = провал пробы
     # проба применяется ко всем backend'ам из всех backend_groups ниже
     http:
-      timeouts:
-        request_timeout: 60s
-        response_header_timeout: 30s
-        read_header_timeout: 5s
-
       standard_headers:
         enabled: true
         # под-флаги опущены → EffectiveSet включит все
