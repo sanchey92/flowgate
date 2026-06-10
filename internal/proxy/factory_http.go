@@ -8,6 +8,7 @@ import (
 	"github.com/sanchey92/flowgate/internal/domain/model"
 	"github.com/sanchey92/flowgate/internal/pool"
 	proxyhttp "github.com/sanchey92/flowgate/internal/proxy/http"
+	"github.com/sanchey92/flowgate/internal/proxy/http/retry"
 	"github.com/sanchey92/flowgate/internal/proxy/http/router"
 )
 
@@ -37,6 +38,21 @@ func newHTTP(r config.Route, proxyCfg config.Proxy, log *slog.Logger) (Built, er
 
 	bp := pool.NewBufferPool(proxyCfg.BufSize)
 
+	rc := proxyCfg.HTTP.Retry
+	conditions := rc.RetryOn
+	if len(conditions) == 0 {
+		conditions = []string{"connection_error", "502", "503", "504"}
+	}
+
+	policy, err := retry.CompileRetryPolicy(
+		rc.Enabled, rc.MaxRetries, conditions,
+		rc.BackoffBase, rc.BackoffMax, rc.IdempotentOnly,
+		false,
+	)
+	if err != nil {
+		return Built{}, fmt.Errorf("proxy: route %q: retry: %w", r.Name, err)
+	}
+
 	p := proxyhttp.New(
 		rt,
 		groups,
@@ -46,6 +62,7 @@ func newHTTP(r config.Route, proxyCfg config.Proxy, log *slog.Logger) (Built, er
 		r.HTTP.StandardHeaders,
 		r.HTTP.WebSocket,
 		proxyCfg.HTTP.RequestTimeout,
+		policy,
 		log,
 	)
 

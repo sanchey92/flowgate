@@ -12,6 +12,7 @@ import (
 	"github.com/sanchey92/flowgate/internal/config"
 	"github.com/sanchey92/flowgate/internal/domain/model"
 	"github.com/sanchey92/flowgate/internal/pool"
+	"github.com/sanchey92/flowgate/internal/proxy/http/retry"
 	"github.com/sanchey92/flowgate/internal/proxy/http/router"
 )
 
@@ -61,6 +62,7 @@ func BenchmarkHTTPProxy_Throughput(b *testing.B) {
 		config.StandardHeadersConfig{Enabled: true},
 		config.WebSocketConfig{Enabled: true},
 		0,
+		&retry.Policy{},
 		log)
 
 	frontend := httptest.NewServer(p)

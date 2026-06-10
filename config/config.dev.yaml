@@ -24,6 +24,21 @@ proxy:
     response_header_timeout: 30s
     write_timeout: 0s
     read_header_timeout: 5s
+    retry:
+      enabled: true
+      max_retries: 2               # дополнительных попыток сверх первой (итого до 3 заходов)
+      retry_on:                    # если список пуст → connection_error, 502, 503, 504
+        - connection_error         # отказ соединения и прочие сетевые ошибки
+        - reset                    # ECONNRESET — соединение сброшено бэкендом
+        - "502"
+        - "503"
+        - "504"
+        # - timeout                # сетевые таймауты (response_header_timeout и т.п.);
+        #                          # осторожно: каждая попытка может ждать до 30s
+      backoff_base: 100ms          # задержка перед первым ретраем, дальше ×2 (+джиттер)
+      backoff_max: 2s              # потолок задержки между попытками
+      idempotent_only: true        # ретраить только идемпотентные методы и запросы
+                                   # с заголовком Idempotency-Key; false снимает ограничение
 
 routes:
   - name: tcp-edge

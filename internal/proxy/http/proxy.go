@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
-	"net/url"
 	"time"
 
 	"github.com/sanchey92/flowgate/internal/config"
@@ -15,6 +14,7 @@ import (
 	"github.com/sanchey92/flowgate/internal/domain/model"
 	"github.com/sanchey92/flowgate/internal/proxy/http/middleware"
 	"github.com/sanchey92/flowgate/internal/proxy/http/reqctx"
+	"github.com/sanchey92/flowgate/internal/proxy/http/retry"
 	"github.com/sanchey92/flowgate/internal/proxy/http/router"
 	"github.com/sanchey92/flowgate/internal/proxy/requestid"
 )
@@ -50,6 +50,7 @@ func New(
 	stdHeaders config.StandardHeadersConfig,
 	ws config.WebSocketConfig,
 	requestTimeout time.Duration,
+	policy *retry.Policy,
 	log *slog.Logger,
 ) *Proxy {
 	p := &Proxy{
@@ -65,7 +66,7 @@ func New(
 
 	p.rp = &httputil.ReverseProxy{
 		Rewrite:        p.rewrite,
-		Transport:      NewSelectingTransport(p.transport),
+		Transport:      newRetryTransport(p.transport, groups, policy, log),
 		BufferPool:     newHTTPBufferPool(pool),
 		ErrorHandler:   p.handleError,
 		ModifyResponse: p.modifyResponse,
@@ -88,28 +89,10 @@ func (p *Proxy) rewrite(pr *httputil.ProxyRequest) {
 	}
 	slot.Group = group
 
-	bal, ok := p.groups[group]
-	if !ok {
+	if _, ok := p.groups[group]; !ok {
 		slot.PickErr = fmt.Errorf("%w: %q", domainErr.ErrUnknownGroup, group)
 		return
 	}
-
-	backend, err := bal.Pick()
-	if err != nil {
-		slot.PickErr = err
-		return
-	}
-	if backend == nil {
-		slot.PickErr = domainErr.ErrNilBackend
-		return
-	}
-	slot.Backend = backend
-
-	target := &url.URL{
-		Scheme: "http",
-		Host:   backend.Addr,
-	}
-	pr.SetURL(target)
 
 	p.standard.ApplyRequest(pr, slot)
 	p.headers.ApplyRequest(pr.Out.Header, slot)
@@ -168,7 +151,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	ctx := reqctx.WithSlot(r.Context(), slot)
 
-	if p.requestTimeout > 0 && slot.Upgrade == upgradeWebSocket {
+	if p.requestTimeout > 0 && slot.Upgrade != upgradeWebSocket {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, p.requestTimeout)
 		defer cancel()
@@ -215,7 +198,6 @@ func (p *Proxy) accessLog(r *http.Request, slot *reqctx.RequestSlot, rec *record
 		slog.Int64("bytes_out", rec.bytesOut),
 		slog.String("group", slot.Group),
 	}
-	// ContentLength == -1 для chunked-запросов с неизвестной длиной — такое не логируем.
 	if r.ContentLength >= 0 {
 		fields = append(fields, slog.Int64("bytes_in", r.ContentLength))
 	}
@@ -227,6 +209,9 @@ func (p *Proxy) accessLog(r *http.Request, slot *reqctx.RequestSlot, rec *record
 	}
 	if slot.PickErr != nil {
 		fields = append(fields, slog.String("pick_error", slot.PickErr.Error()))
+	}
+	if slot.Retries > 0 {
+		fields = append(fields, slog.Int("retries", slot.Retries))
 	}
 
 	if rec.status >= http.StatusInternalServerError {

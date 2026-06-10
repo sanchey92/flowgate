@@ -21,6 +21,7 @@ import (
 	"github.com/sanchey92/flowgate/internal/pool"
 	"github.com/sanchey92/flowgate/internal/proxy/http/mocks"
 	"github.com/sanchey92/flowgate/internal/proxy/http/reqctx"
+	"github.com/sanchey92/flowgate/internal/proxy/http/retry"
 	"github.com/sanchey92/flowgate/internal/proxy/http/router"
 )
 
@@ -57,7 +58,7 @@ func newProxyWithWS(t *testing.T, r *router.Router, groups map[string]Balancer, 
 	t.Helper()
 	log, buf := newTestLogger()
 	tr := BuildTransport(TransportSettings{})
-	p := New(r, groups, tr, pool.NewBufferPool(4096), config.HeaderRules{}, config.StandardHeadersConfig{}, ws, 0, log)
+	p := New(r, groups, tr, pool.NewBufferPool(4096), config.HeaderRules{}, config.StandardHeadersConfig{}, ws, 0, &retry.Policy{}, log)
 	return p, buf
 }
 
@@ -81,7 +82,7 @@ func TestNew_WiresReverseProxy(t *testing.T) {
 	tr := BuildTransport(TransportSettings{})
 	log, _ := newTestLogger()
 
-	p := New(r, map[string]Balancer{}, tr, pool.NewBufferPool(1024), config.HeaderRules{}, config.StandardHeadersConfig{}, config.WebSocketConfig{Enabled: true}, 0, log)
+	p := New(r, map[string]Balancer{}, tr, pool.NewBufferPool(1024), config.HeaderRules{}, config.StandardHeadersConfig{}, config.WebSocketConfig{Enabled: true}, 0, &retry.Policy{}, log)
 
 	require.NotNil(t, p)
 	assert.Same(t, tr, p.transport)
@@ -136,12 +137,12 @@ func TestRewrite_NoSlotIsNoop(t *testing.T) {
 	assert.NotPanics(t, func() { p.rewrite(pr) })
 }
 
+// rewrite только маршрутизирует и применяет заголовки. Выбор бэкенда и
+// переписывание URL теперь происходят в retryTransport (на каждую попытку),
+// поэтому Pick здесь вызываться не должен — мок упал бы на unexpected call.
 func TestRewrite_Success(t *testing.T) {
 	t.Parallel()
-	backend := model.NewBackend("10.0.0.1:8080", 1, 0)
-
 	bal := mocks.NewBalancer(t)
-	bal.EXPECT().Pick().Return(backend, nil)
 
 	p, _ := newProxy(t, fallbackRouter(t, "g1"), map[string]Balancer{"g1": bal})
 
@@ -151,9 +152,7 @@ func TestRewrite_Success(t *testing.T) {
 
 	assert.NoError(t, slot.PickErr)
 	assert.Equal(t, "g1", slot.Group)
-	assert.Same(t, backend, slot.Backend)
-	assert.Equal(t, "http", pr.Out.URL.Scheme)
-	assert.Equal(t, "10.0.0.1:8080", pr.Out.URL.Host)
+	assert.Nil(t, slot.Backend)
 }
 
 func TestRewrite_NoRoute(t *testing.T) {
@@ -184,57 +183,6 @@ func TestRewrite_UnknownGroup(t *testing.T) {
 	assert.ErrorIs(t, slot.PickErr, domainErr.ErrUnknownGroup)
 	assert.Contains(t, slot.PickErr.Error(), "ghost")
 	assert.Equal(t, "ghost", slot.Group)
-}
-
-func TestRewrite_PickError(t *testing.T) {
-	t.Parallel()
-	bal := mocks.NewBalancer(t)
-	bal.EXPECT().Pick().Return(nil, domainErr.ErrNoBackends)
-
-	p, _ := newProxy(t, fallbackRouter(t, "g1"), map[string]Balancer{"g1": bal})
-
-	slot := &reqctx.RequestSlot{}
-	pr := newProxyRequest(t, "http://example.com/foo", slot)
-	p.rewrite(pr)
-
-	assert.ErrorIs(t, slot.PickErr, domainErr.ErrNoBackends)
-	assert.Nil(t, slot.Backend)
-}
-
-// Pick нарушает контракт: возвращает backend вместе с ошибкой.
-// rewrite не должен записывать backend в слот — иначе defer вызовет Release
-// на бэкенде, который фактически не был выдан.
-func TestRewrite_PickReturnsBackendWithError(t *testing.T) {
-	t.Parallel()
-	backend := model.NewBackend("10.0.0.2:9090", 1, 0)
-
-	bal := mocks.NewBalancer(t)
-	bal.EXPECT().Pick().Return(backend, domainErr.ErrNoBackends)
-
-	p, _ := newProxy(t, fallbackRouter(t, "g1"), map[string]Balancer{"g1": bal})
-
-	slot := &reqctx.RequestSlot{}
-	pr := newProxyRequest(t, "http://example.com/foo", slot)
-	p.rewrite(pr)
-
-	assert.ErrorIs(t, slot.PickErr, domainErr.ErrNoBackends)
-	assert.Nil(t, slot.Backend)
-}
-
-// Pick нарушает контракт: err == nil, но backend пуст.
-func TestRewrite_PickReturnsNilBackend(t *testing.T) {
-	t.Parallel()
-	bal := mocks.NewBalancer(t)
-	bal.EXPECT().Pick().Return(nil, nil)
-
-	p, _ := newProxy(t, fallbackRouter(t, "g1"), map[string]Balancer{"g1": bal})
-
-	slot := &reqctx.RequestSlot{}
-	pr := newProxyRequest(t, "http://example.com/foo", slot)
-	p.rewrite(pr)
-
-	assert.ErrorIs(t, slot.PickErr, domainErr.ErrNilBackend)
-	assert.Nil(t, slot.Backend)
 }
 
 // --- handleError -----------------------------------------------------------
@@ -528,7 +476,7 @@ func newProxyWithHeaders(
 	t.Helper()
 	log, buf := newTestLogger()
 	tr := BuildTransport(TransportSettings{})
-	p := New(rt, groups, tr, pool.NewBufferPool(4096), headerRules, std, config.WebSocketConfig{Enabled: true}, 0, log)
+	p := New(rt, groups, tr, pool.NewBufferPool(4096), headerRules, std, config.WebSocketConfig{Enabled: true}, 0, &retry.Policy{}, log)
 	return p, buf
 }
 

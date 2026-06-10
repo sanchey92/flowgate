@@ -24,6 +24,7 @@ type RequestSlot struct {
 	Path       string
 	Scheme     string
 	Upgrade    string
+	Retries    int
 }
 
 func SlotFrom(ctx context.Context) *RequestSlot {
