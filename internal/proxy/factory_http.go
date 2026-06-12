@@ -53,6 +53,8 @@ func newHTTP(r config.Route, proxyCfg config.Proxy, log *slog.Logger) (Built, er
 		return Built{}, fmt.Errorf("proxy: route %q: retry: %w", r.Name, err)
 	}
 
+	budget := retry.NewBudget(rc.BudgetPercent)
+
 	p := proxyhttp.New(
 		rt,
 		groups,
@@ -63,6 +65,7 @@ func newHTTP(r config.Route, proxyCfg config.Proxy, log *slog.Logger) (Built, er
 		r.HTTP.WebSocket,
 		proxyCfg.HTTP.RequestTimeout,
 		policy,
+		budget,
 		log,
 	)
 

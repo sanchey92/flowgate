@@ -63,6 +63,7 @@ func BenchmarkHTTPProxy_Throughput(b *testing.B) {
 		config.WebSocketConfig{Enabled: true},
 		0,
 		&retry.Policy{},
+		retry.NewBudget(20),
 		log)
 
 	frontend := httptest.NewServer(p)

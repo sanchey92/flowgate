@@ -19,6 +19,7 @@ type retryTransport struct {
 	inner  http.RoundTripper
 	groups map[string]Balancer
 	policy *retry.Policy
+	budget *retry.Budget
 	log    *slog.Logger
 }
 
@@ -26,12 +27,14 @@ func newRetryTransport(
 	inner http.RoundTripper,
 	groups map[string]Balancer,
 	policy *retry.Policy,
+	budget *retry.Budget,
 	log *slog.Logger,
 ) *retryTransport {
 	return &retryTransport{
 		inner:  inner,
 		groups: groups,
 		policy: policy,
+		budget: budget,
 		log:    log,
 	}
 }
@@ -55,6 +58,7 @@ func (t *retryTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("http proxy: %w", err)
 	}
+	t.budget.RecordRequest()
 	return t.roundTrip(r, slot, bal, maxAttempts)
 }
 
@@ -112,13 +116,23 @@ func (t *retryTransport) roundTrip(
 		failed := isUpstreamFailure(resp, rtErr)
 		backend.Observe(failed)
 
-		last := attempt == maxAttempts-1
-		if !failed || last || !t.policy.RetryableOutcome(resp, rtErr) {
+		retryable := failed && attempt < maxAttempts-1 && t.policy.RetryableOutcome(resp, rtErr)
+
+		if retryable && !t.budget.AllowRetry() {
+			t.log.Debug("http proxy: retry denied by budget",
+				slog.String("request_id", slot.RequestID),
+				slog.String("backend", backend.Addr),
+			)
+			retryable = false
+		}
+
+		if !retryable {
 			if rtErr != nil {
 				return nil, fmt.Errorf("http proxy: round trip: %w", rtErr)
 			}
 			return resp, nil
 		}
+
 		drainAndClose(resp)
 		prev = backend
 		slot.Backend = nil
@@ -128,9 +142,6 @@ func (t *retryTransport) roundTrip(
 	return nil, orErr(lastErr, fmt.Errorf("http proxy: %w", domainErr.ErrAllBackendsUnhealthy))
 }
 
-// orErr возвращает primary, если он не nil, иначе fallback.
-// Локальная замена cmp.Or: wrapcheck требует оборачивать ошибки,
-// возвращённые из внешних пакетов.
 func orErr(primary, fallback error) error {
 	if primary != nil {
 		return primary

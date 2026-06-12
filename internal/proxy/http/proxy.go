@@ -51,6 +51,7 @@ func New(
 	ws config.WebSocketConfig,
 	requestTimeout time.Duration,
 	policy *retry.Policy,
+	budget *retry.Budget,
 	log *slog.Logger,
 ) *Proxy {
 	p := &Proxy{
@@ -66,7 +67,7 @@ func New(
 
 	p.rp = &httputil.ReverseProxy{
 		Rewrite:        p.rewrite,
-		Transport:      newRetryTransport(p.transport, groups, policy, log),
+		Transport:      newRetryTransport(p.transport, groups, policy, budget, log),
 		BufferPool:     newHTTPBufferPool(pool),
 		ErrorHandler:   p.handleError,
 		ModifyResponse: p.modifyResponse,
